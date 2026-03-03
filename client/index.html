@@ -7,11 +7,15 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="LibreChat - An open source chat application with support for multiple AI models" />
-    <title>LibreChat</title>
-    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
-    <link rel="apple-touch-icon" href="assets/apple-touch-icon-180x180.png" />
+    <meta name="description" content="KYNS — IA sem censura, sem rastreamento. Grátis e anônimo." />
+    <meta property="og:title" content="KYNS — A verdade não precisa de permissão" />
+    <meta property="og:description" content="IA sem censura, sem rastreamento. Grátis e anônimo." />
+    <meta property="og:image" content="https://raw.githubusercontent.com/Kyns-ai/config/main/files/og-kyns.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://chat.kyns.ai" />
+    <title>KYNS</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
     <style>
       html,
@@ -25,7 +29,6 @@
       const theme = localStorage.getItem('color-theme');
       const loadingContainerStyle = document.createElement('style');
       let backgroundColor;
-
       if (theme === 'dark') {
         backgroundColor = '#0d0d0d';
       } else if (theme === 'light') {
@@ -36,7 +39,6 @@
       } else {
         backgroundColor = '#ffffff';
       }
-
       loadingContainerStyle.innerHTML = `
         #loading-container {
           display: flex;
