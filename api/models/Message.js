@@ -55,9 +55,17 @@ async function saveMessage(req, params, metadata) {
     };
 
     if (req?.body?.isTemporary) {
-      return null;
+      try {
+        const appConfig = req.config;
+        update.expiredAt = createTempChatExpirationDate(appConfig?.interfaceConfig);
+      } catch (err) {
+        logger.error('Error creating temporary chat expiration date:', err);
+        logger.info(`---\`saveMessage\` context: ${metadata?.context}`);
+        update.expiredAt = null;
+      }
+    } else {
+      update.expiredAt = null;
     }
-    update.expiredAt = null;
 
     if (update.tokenCount != null && isNaN(update.tokenCount)) {
       logger.warn(
