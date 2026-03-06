@@ -8,6 +8,7 @@ import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import HoverButtons from '~/components/Chat/Messages/HoverButtons';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
+import AvatarLightbox from '~/components/Chat/Messages/AvatarLightbox';
 import { useLocalize, useMessageActions, useContentMetadata } from '~/hooks';
 import SubRow from '~/components/Chat/Messages/SubRow';
 import { cn, getMessageAriaLabel } from '~/utils';
@@ -123,9 +124,14 @@ const MessageRender = memo(
       >
         {!hasParallelContent && (
           <div className="relative flex flex-shrink-0 flex-col items-center">
-            <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
-              <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
-            </div>
+            <AvatarLightbox
+              avatarUrl={agent?.avatar?.filepath}
+              alt={agent?.name ? `${agent.name} avatar` : 'Agent avatar'}
+            >
+              <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
+                <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
+              </div>
+            </AvatarLightbox>
           </div>
         )}
 

@@ -5,6 +5,7 @@ import type { TMessageContentParts } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon } from '~/common';
 import { useMessageHelpers, useLocalize, useAttachments, useContentMetadata } from '~/hooks';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
+import AvatarLightbox from '~/components/Chat/Messages/AvatarLightbox';
 import ContentParts from './Content/ContentParts';
 import { fontSizeAtom } from '~/store/fontSize';
 import SiblingSwitch from './SiblingSwitch';
@@ -111,9 +112,14 @@ export default function Message(props: TMessageProps) {
           >
             {!hasParallelContent && (
               <div className="relative flex flex-shrink-0 flex-col items-center">
-                <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full pt-0.5">
-                  <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
-                </div>
+                <AvatarLightbox
+                  avatarUrl={agent?.avatar?.filepath}
+                  alt={agent?.name ? `${agent.name} avatar` : 'Agent avatar'}
+                >
+                  <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full pt-0.5">
+                    <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
+                  </div>
+                </AvatarLightbox>
               </div>
             )}
             <div

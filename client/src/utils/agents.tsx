@@ -64,7 +64,7 @@ const LazyAgentAvatar = ({
 export const renderAgentAvatar = (
   agent: t.Agent | null | undefined,
   options: {
-    size?: 'icon' | 'sm' | 'md' | 'lg' | 'xl';
+    size?: 'icon' | 'sm' | 'md' | 'lg' | 'xl' | 'card' | 'modal';
     className?: string;
     showBorder?: boolean;
   } = {},
@@ -73,13 +73,14 @@ export const renderAgentAvatar = (
 
   const avatarUrl = getAgentAvatarUrl(agent);
 
-  // Size mappings for responsive design
   const sizeClasses = {
     icon: 'h-5 w-5',
     sm: 'h-12 w-12 sm:h-14 sm:w-14',
     md: 'h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24',
     lg: 'h-20 w-20 sm:h-24 sm:w-24 md:h-28 md:w-28',
     xl: 'h-24 w-24',
+    card: 'h-20 w-20 sm:h-24 sm:w-24 md:h-[96px] md:w-[96px]',
+    modal: 'h-[120px] w-[120px] sm:h-[150px] sm:w-[150px]',
   };
 
   const iconSizeClasses = {
@@ -88,6 +89,8 @@ export const renderAgentAvatar = (
     md: 'h-6 w-6 sm:h-8 sm:w-8 md:h-10 md:w-10',
     lg: 'h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12',
     xl: 'h-10 w-10',
+    card: 'h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12',
+    modal: 'h-12 w-12 sm:h-16 sm:w-16',
   };
 
   const placeholderSizeClasses = {
@@ -96,6 +99,8 @@ export const renderAgentAvatar = (
     md: 'h-12 w-12 sm:h-16 sm:w-16 md:h-20 md:w-20',
     lg: 'h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24',
     xl: 'h-20 w-20',
+    card: 'h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24',
+    modal: 'h-24 w-24 sm:h-32 sm:w-32',
   };
 
   const borderClasses = showBorder ? 'border-1 border-border-medium' : '';
