@@ -12,7 +12,7 @@ import SiblingSwitch from './SiblingSwitch';
 import MultiMessage from './MultiMessage';
 import HoverButtons from './HoverButtons';
 import SubRow from './SubRow';
-import { cn, getMessageAriaLabel } from '~/utils';
+import { cn, getMessageAriaLabel, getAgentAvatarUrl } from '~/utils';
 import store from '~/store';
 
 export default function Message(props: TMessageProps) {
@@ -113,7 +113,7 @@ export default function Message(props: TMessageProps) {
             {!hasParallelContent && (
               <div className="relative flex flex-shrink-0 flex-col items-center">
                 <AvatarLightbox
-                  avatarUrl={agent?.avatar?.filepath}
+                  avatarUrl={getAgentAvatarUrl(agent)}
                   alt={agent?.name ? `${agent.name} avatar` : 'Agent avatar'}
                 >
                   <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full pt-0.5">
