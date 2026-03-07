@@ -34,7 +34,7 @@ const AgentChatHeader: React.FC<AgentChatHeaderProps> = ({ conversation }) => {
           aria-label={`Ver detalhes de ${agent.name}`}
         >
           <div className="flex-shrink-0 overflow-hidden rounded-full shadow-md">
-            {renderAgentAvatar(agent, { size: 'sm', showBorder: false })}
+            {renderAgentAvatar(agent, { size: 'md', showBorder: false })}
           </div>
           <div className="flex flex-col items-start overflow-hidden">
             <span className="truncate text-base font-semibold text-text-primary">{agent.name}</span>
@@ -44,7 +44,7 @@ const AgentChatHeader: React.FC<AgentChatHeaderProps> = ({ conversation }) => {
           </div>
         </button>
       </OGDialogTrigger>
-      <AgentDetailContent agent={agent} />
+      <AgentDetailContent agent={agent} hideStartChat />
     </OGDialog>
   );
 };

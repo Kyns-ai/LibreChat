@@ -26,13 +26,14 @@ interface AgentWithSupport extends t.Agent {
 
 interface AgentDetailContentProps {
   agent: AgentWithSupport;
+  hideStartChat?: boolean;
 }
 
 /**
  * Dialog content for displaying agent details
  * Used inside OGDialog with OGDialogTrigger for proper focus management
  */
-const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent }) => {
+const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent, hideStartChat = false }) => {
   const localize = useLocalize();
   const queryClient = useQueryClient();
   const { showToast } = useToastContext();
@@ -161,7 +162,7 @@ const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent }) => {
         {agent?.description}
       </div>
 
-      {/* Action button */}
+      {/* Action buttons */}
       <div className="mb-4 mt-6 flex justify-center gap-2">
         <Button
           variant="outline"
@@ -181,9 +182,11 @@ const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent }) => {
         >
           <Link className="h-4 w-4" aria-hidden="true" />
         </Button>
-        <Button className="w-full max-w-xs" onClick={handleStartChat} disabled={!agent}>
-          {localize('com_agents_start_chat')}
-        </Button>
+        {!hideStartChat && (
+          <Button className="w-full max-w-xs" onClick={handleStartChat} disabled={!agent}>
+            {localize('com_agents_start_chat')}
+          </Button>
+        )}
       </div>
     </OGDialogContent>
   );
