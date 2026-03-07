@@ -5,6 +5,7 @@ import { CSSTransition } from 'react-transition-group';
 import type { TMessage } from 'librechat-data-provider';
 import { useScreenshot, useMessageScrolling, useLocalize } from '~/hooks';
 import ScrollToBottom from '~/components/Messages/ScrollToBottom';
+import AgentChatHeader from '~/components/Chat/AgentChatHeader';
 import { MessagesViewProvider } from '~/Providers';
 import { fontSizeAtom } from '~/store/fontSize';
 import MultiMessage from './MultiMessage';
@@ -49,6 +50,7 @@ function MessagesViewContent({
             }}
           >
             <div className="flex flex-col pb-9 pt-14 dark:bg-transparent">
+              <AgentChatHeader conversation={conversation} />
               {(_messagesTree && _messagesTree.length == 0) || _messagesTree === null ? (
                 <div
                   className={cn(

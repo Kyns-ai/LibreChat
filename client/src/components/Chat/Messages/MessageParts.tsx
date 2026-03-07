@@ -116,7 +116,12 @@ export default function Message(props: TMessageProps) {
                   avatarUrl={getAgentAvatarUrl(agent)}
                   alt={agent?.name ? `${agent.name} avatar` : 'Agent avatar'}
                 >
-                  <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full pt-0.5">
+                  <div
+                    className={cn(
+                      'flex items-center justify-center overflow-hidden rounded-full pt-0.5',
+                      agent ? 'h-10 w-10' : 'h-6 w-6',
+                    )}
+                  >
                     <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
                   </div>
                 </AvatarLightbox>

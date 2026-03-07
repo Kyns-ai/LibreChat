@@ -19,6 +19,8 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE_URL = process.env.LIBRECHAT_BASE_URL || 'https://chat.kyns.ai';
+const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DEFAULT_AGENTS_PATH = path.join(process.env.HOME || process.env.USERPROFILE || '', 'Downloads', 'agents.json');
 
 function loadAgentsJson(filePath) {
@@ -71,7 +73,7 @@ async function login(email, password) {
   const url = `${BASE_URL.replace(/\/$/, '')}/api/auth/login`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
     body: JSON.stringify({ email, password }),
   });
   const data = await res.json().catch(() => ({}));
@@ -95,6 +97,7 @@ async function createAgent(token, body) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'User-Agent': USER_AGENT,
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(body),
