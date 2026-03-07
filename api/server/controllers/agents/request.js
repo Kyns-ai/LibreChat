@@ -37,6 +37,12 @@ function createCloseHandler(abortController) {
  * Returns streamId immediately, client subscribes separately via SSE.
  */
 const ResumableAgentController = async (req, res, next, initializeClient, addTitle) => {
+  logger.info('[AgentChat] POST /chat received', {
+    agent_id: req.body?.agent_id,
+    conversationId: req.body?.conversationId,
+    userId: req.user?.id,
+  });
+
   const {
     text,
     isRegenerate,
@@ -77,6 +83,8 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
     const job = await GenerationJobManager.createJob(streamId, userId, conversationId);
     const jobCreatedAt = job.createdAt; // Capture creation time to detect job replacement
     req._resumableStreamId = streamId;
+
+    logger.info(`[ResumableAgentController] Job created streamId=${streamId} (conversationId=${conversationId})`);
 
     // Send JSON response IMMEDIATELY so client can connect to SSE stream
     // This is critical: tool loading (MCP OAuth) may emit events that the client needs to receive
@@ -414,11 +422,16 @@ const ResumableAgentController = async (req, res, next, initializeClient, addTit
 };
 
 /**
- * Agent Controller - Routes to ResumableAgentController for all requests.
- * The legacy non-resumable path is kept below but no longer used by default.
+ * Agent Controller - Uses resumable (POST then GET stream) when Redis is enabled.
+ * When Redis is disabled (e.g. single replica or no Redis), uses legacy inline stream
+ * so the response is streamed on the same POST connection and works without sticky sessions.
  */
 const AgentController = async (req, res, next, initializeClient, addTitle) => {
-  return ResumableAgentController(req, res, next, initializeClient, addTitle);
+  const useRedis = req.app.get('agentStreamUseRedis') === true;
+  if (useRedis) {
+    return ResumableAgentController(req, res, next, initializeClient, addTitle);
+  }
+  return _LegacyAgentController(req, res, next, initializeClient, addTitle);
 };
 
 /**
@@ -427,6 +440,12 @@ const AgentController = async (req, res, next, initializeClient, addTitle) => {
  * @deprecated Use ResumableAgentController instead
  */
 const _LegacyAgentController = async (req, res, next, initializeClient, addTitle) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
   const {
     text,
     isRegenerate,

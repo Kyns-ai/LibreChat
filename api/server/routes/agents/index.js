@@ -55,8 +55,14 @@ router.get('/chat/stream/:streamId', async (req, res) => {
   const { streamId } = req.params;
   const isResume = req.query.resume === 'true';
 
+  logger.info('[AgentChat] GET /stream requested', { streamId, isResume, userId: req.user?.id });
+
   const job = await GenerationJobManager.getJob(streamId);
   if (!job) {
+    logger.error(
+      `[AgentStream] Job not found for streamId: ${streamId}. ` +
+        'If using multiple replicas without Redis, POST and GET may hit different instances. Set USE_REDIS=true and REDIS_URI, or use a single replica.',
+    );
     return res.status(404).json({
       error: 'Stream not found',
       message: 'The generation job does not exist or has expired.',
@@ -74,7 +80,7 @@ router.get('/chat/stream/:streamId', async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
-  logger.debug(`[AgentStream] Client subscribed to ${streamId}, resume: ${isResume}`);
+  logger.info(`[AgentStream] Client subscribed to streamId=${streamId}, resume=${isResume}`);
 
   // Send sync event with resume state for ALL reconnecting clients
   // This supports multi-tab scenarios where each tab needs run step data
