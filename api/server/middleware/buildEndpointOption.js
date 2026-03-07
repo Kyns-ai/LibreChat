@@ -48,7 +48,10 @@ async function buildEndpointOption(req, res, next) {
   }
 
   const appConfig = req.config;
-  if (appConfig.modelSpecs?.list && appConfig.modelSpecs?.enforce) {
+  const isAgentEndpoint =
+    isAgentsEndpoint(endpoint) || req.baseUrl.startsWith(EndpointURLs[EModelEndpoint.agents]);
+
+  if (!isAgentEndpoint && appConfig.modelSpecs?.list && appConfig.modelSpecs?.enforce) {
     /** @type {{ list: TModelSpec[] }}*/
     const { list } = appConfig.modelSpecs;
     const { spec } = parsedBody;
