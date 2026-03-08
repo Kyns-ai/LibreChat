@@ -3,7 +3,6 @@ import { useAtomValue } from 'jotai';
 import { Clipboard, CheckMark, TooltipAnchor } from '@librechat/client';
 import { Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
 import type { FocusEvent, FC } from 'react';
-import { showThinkingAtom } from '~/store/showThinking';
 import { useMessageContext } from '~/Providers';
 import { fontSizeAtom } from '~/store/fontSize';
 import { useLocalize } from '~/hooks';
@@ -244,7 +243,7 @@ export const FloatingThinkingBar = memo(
  */
 const Thinking: React.ElementType = memo(({ children }: { children: React.ReactNode }) => {
   const localize = useLocalize();
-  const showThinking = useAtomValue(showThinkingAtom);
+  const showThinking = false;
   const [isExpanded, setIsExpanded] = useState(showThinking);
   const [isBarVisible, setIsBarVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);

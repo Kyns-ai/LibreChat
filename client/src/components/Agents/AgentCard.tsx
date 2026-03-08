@@ -72,7 +72,7 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, className = '' }
     );
 
     queryClient.invalidateQueries([QueryKeys.messages]);
-    navigate(`/c/${Constants.NEW_CONVO}`, { state: { focusChat: true } });
+    navigate(`/c/${Constants.NEW_CONVO}`, { state: { focusChat: true, agentId: agent.id } });
   }, [agent, queryClient, navigate]);
 
   const handleInfoClick = useCallback(
