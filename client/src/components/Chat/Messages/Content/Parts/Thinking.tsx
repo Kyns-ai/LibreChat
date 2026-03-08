@@ -284,7 +284,7 @@ const Thinking: React.ElementType = memo(({ children }: { children: React.ReactN
     return '';
   }, [children]);
 
-  if (children == null) {
+  if (children == null || !showThinking) {
     return null;
   }
 

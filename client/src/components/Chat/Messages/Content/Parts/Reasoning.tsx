@@ -85,7 +85,7 @@ const Reasoning = memo(({ reasoning, isLast }: ReasoningProps) => {
     [effectiveIsSubmitting, localize, isLast],
   );
 
-  if (!reasoningText) {
+  if (!reasoningText || !showThinking) {
     return null;
   }
 
