@@ -29,6 +29,7 @@ Uso do script: `node config/seed-agents.js [caminho/para/agents.json]`
 | **model_parameters** | object | Parâmetros do modelo (temperature, max_tokens, etc.). |
 | **tools** | string[] | Lista de IDs de ferramentas. Ex: `["web_search", "code_interpreter"]`. Default: `[]`. |
 | **conversation_starters** | string[] | Frases sugeridas para iniciar conversa. |
+| **greeting** | string | Primeira mensagem do agente ao abrir um chat novo (estilo Character.AI). Só aparece em conversas de agentes; o chat geral não é afectado. |
 | **support_contact** | object | Ver formato abaixo. |
 | **edges** | object[] | Handoffs entre agentes (grafo). Ver formato abaixo. |
 | **end_after_tools** | boolean | Se deve terminar resposta após usar ferramentas. |

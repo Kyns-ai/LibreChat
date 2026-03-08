@@ -69,13 +69,12 @@ async function main() {
     headers: headers(token),
     body: JSON.stringify({
       text: 'Diagnóstico: mensagem de teste.',
+      messageId: `msg-${Date.now()}`,
+      parentMessageId: '00000000-0000-0000-0000-000000000000',
       conversationId,
+      endpoint: 'agents',
       agent_id: agentId,
-      endpointOption: {
-        endpoint: 'agents',
-        agent_id: agentId,
-        model: agentId,
-      },
+      model: agentId,
     }),
   });
   const postData = await postRes.json().catch(() => ({}));

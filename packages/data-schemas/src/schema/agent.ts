@@ -103,6 +103,10 @@ const agentSchema = new Schema<IAgent>(
       index: true,
       default: 'general',
     },
+    greeting: {
+      type: String,
+      default: undefined,
+    },
     support_contact: {
       type: Schema.Types.Mixed,
       default: undefined,

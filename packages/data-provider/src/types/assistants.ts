@@ -272,6 +272,8 @@ export type Agent = {
   isPublic?: boolean;
   version?: number;
   category?: string;
+  /** Optional first message shown when user opens a new chat with this agent (Character.AI style) */
+  greeting?: string;
   support_contact?: SupportContact;
   /** Per-tool configuration options (deferred loading, allowed callers, etc.) */
   tool_options?: AgentToolOptions;

@@ -1,12 +1,18 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { Spinner } from '@librechat/client';
 import { useParams } from 'react-router-dom';
-import { Constants, buildTree } from 'librechat-data-provider';
+import { Constants, buildTree, isAgentsEndpoint } from 'librechat-data-provider';
 import type { TMessage } from 'librechat-data-provider';
 import type { ChatFormValues } from '~/common';
-import { ChatContext, AddedChatContext, useFileMapContext, ChatFormProvider } from '~/Providers';
+import {
+  ChatContext,
+  AddedChatContext,
+  useFileMapContext,
+  useAgentsMapContext,
+  ChatFormProvider,
+} from '~/Providers';
 import { useAddedResponse, useResumeOnLoad, useAdaptiveSSE, useChatHelpers } from '~/hooks';
 import ConversationStarters from './Input/ConversationStarters';
 import { useGetMessagesByConvoId } from '~/data-provider';
@@ -19,6 +25,8 @@ import Footer from './Footer';
 import { cn } from '~/utils';
 import store from '~/store';
 
+const SYNTHETIC_GREETING_MESSAGE_ID = 'agent-greeting-synthetic';
+
 function LoadingSpinner() {
   return (
     <div className="relative flex-1 overflow-hidden overflow-y-auto">
@@ -29,10 +37,32 @@ function LoadingSpinner() {
   );
 }
 
+function buildAgentGreetingTree(
+  greeting: string,
+  agentId: string,
+  agentName: string | null,
+  conversationId: string,
+): TMessage[] {
+  const synthetic: TMessage = {
+    messageId: SYNTHETIC_GREETING_MESSAGE_ID,
+    conversationId,
+    parentMessageId: null,
+    text: greeting,
+    isCreatedByUser: false,
+    sender: agentName ?? 'AI',
+    model: agentId,
+    title: 'New Chat',
+  };
+  const tree = buildTree({ messages: [synthetic], fileMap: undefined });
+  return tree ?? [];
+}
+
 function ChatView({ index = 0 }: { index?: number }) {
   const { conversationId } = useParams();
   const rootSubmission = useRecoilValue(store.submissionByIndex(index));
   const centerFormOnLanding = useRecoilValue(store.centerFormOnLanding);
+  const conversation = useRecoilValue(store.conversationByIndex(index));
+  const agentsMap = useAgentsMapContext();
 
   const fileMap = useFileMapContext();
 
@@ -46,6 +76,39 @@ function ChatView({ index = 0 }: { index?: number }) {
     ),
     enabled: !!fileMap,
   });
+
+  const agentGreetingTree = useMemo(() => {
+    const isNewConvo =
+      conversationId === Constants.NEW_CONVO || conversationId == null || conversationId === '';
+    if (
+      isNewConvo &&
+      conversation?.endpoint != null &&
+      isAgentsEndpoint(conversation.endpoint) &&
+      conversation.agent_id &&
+      agentsMap?.[conversation.agent_id]?.greeting
+    ) {
+      const agent = agentsMap[conversation.agent_id];
+      return buildAgentGreetingTree(
+        agent.greeting,
+        agent.id,
+        agent.name ?? null,
+        conversationId ?? Constants.NEW_CONVO,
+      );
+    }
+    return null;
+  }, [
+    conversationId,
+    conversation?.endpoint,
+    conversation?.agent_id,
+    agentsMap,
+  ]);
+
+  const effectiveMessagesTree =
+    (messagesTree && messagesTree.length > 0) || !agentGreetingTree
+      ? messagesTree
+      : agentGreetingTree?.length
+        ? agentGreetingTree
+        : null;
 
   const chatHelpers = useChatHelpers(index, conversationId);
   const addedChatHelpers = useAddedResponse();
@@ -62,16 +125,17 @@ function ChatView({ index = 0 }: { index?: number }) {
 
   let content: JSX.Element | null | undefined;
   const isLandingPage =
-    (!messagesTree || messagesTree.length === 0) &&
+    (!effectiveMessagesTree || effectiveMessagesTree.length === 0) &&
     (conversationId === Constants.NEW_CONVO || !conversationId);
-  const isNavigating = (!messagesTree || messagesTree.length === 0) && conversationId != null;
+  const isNavigating =
+    (!messagesTree || messagesTree.length === 0) && conversationId != null;
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
     content = <LoadingSpinner />;
   } else if ((isLoading || isNavigating) && !isLandingPage) {
     content = <LoadingSpinner />;
   } else if (!isLandingPage) {
-    content = <MessagesView messagesTree={messagesTree} />;
+    content = <MessagesView messagesTree={effectiveMessagesTree} />;
   } else {
     content = <Landing centerFormOnLanding={centerFormOnLanding} />;
   }

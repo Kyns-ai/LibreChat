@@ -1,5 +1,23 @@
 # Agentes não respondem ao enviar mensagem (Railway)
 
+## Deploy falha com «Healthcheck failure»
+
+Se o deploy no Railway falha na fase **Network > Healthcheck** (serviço nunca fica «healthy»), a causa mais provável é:
+
+- **`USE_REDIS=true`** nas variáveis do LibreChat **sem** ter **Redis** configurado (`REDIS_URI` ou `REDIS_URL`).  
+  O arranque do backend faz throw e o processo morre antes de abrir a porta, por isso o healthcheck em `/health` nunca recebe resposta.
+
+**O que fazer:**
+
+1. No Railway → serviço **LibreChat** → **Variables**.
+2. Se **não** usas Redis: define **`USE_REDIS=false`** (ou remove a variável `USE_REDIS`).
+3. Se **quiseres** usar Redis: adiciona o serviço Redis ao projeto e liga-o ao LibreChat (referência `REDIS_URL` ou `REDIS_URI`).
+4. Guarda e faz **redeploy**.
+
+Com `USE_REDIS=false` e sem Redis, o backend usa o fluxo legado e os agentes funcionam na mesma.
+
+---
+
 ## Comportamento actual (corrigido)
 
 Quando **não** tens Redis configurado (`USE_REDIS` não está definido ou é `false`), o backend usa o **fluxo legado**: a resposta do **POST** `/api/agents/chat` é o próprio stream SSE na mesma ligação. Assim, os agentes funcionam com **qualquer número de réplicas**, sem precisar de Redis nem de reduzir a 1 réplica.

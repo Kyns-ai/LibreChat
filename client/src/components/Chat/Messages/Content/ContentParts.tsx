@@ -9,7 +9,7 @@ import type {
 import { MessageContext, SearchContext } from '~/Providers';
 import { ParallelContentRenderer, type PartWithIndex } from './ParallelContent';
 import { mapAttachments } from '~/utils';
-import { EditTextPart, EmptyText } from './Parts';
+import { EditTextPart, EmptyText, ResponseTimer } from './Parts';
 import MemoryArtifacts from './MemoryArtifacts';
 import Sources from '~/components/Web/Sources';
 import Container from './Container';
@@ -25,6 +25,8 @@ type ContentPartsProps = {
   isLast: boolean;
   isSubmitting: boolean;
   isLatestMessage?: boolean;
+  /** When true, show "Responding… Xs" timer in empty state (normal chat only, not agents) */
+  showResponseTimer?: boolean;
   edit?: boolean;
   enterEdit?: (cancel?: boolean) => void | null | undefined;
   siblingIdx?: number;
@@ -54,6 +56,7 @@ const ContentParts = memo(function ContentParts({
   conversationId,
   isCreatedByUser,
   isLatestMessage,
+  showResponseTimer = false,
 }: ContentPartsProps) {
   const attachmentMap = useMemo(() => mapAttachments(attachments ?? []), [attachments]);
   const effectiveIsSubmitting = isLatestMessage ? isSubmitting : false;
@@ -182,6 +185,7 @@ const ContentParts = memo(function ContentParts({
       {showEmptyCursor && (
         <Container>
           <EmptyText />
+          {showResponseTimer && <ResponseTimer />}
         </Container>
       )}
       {sequentialParts.map(({ part, idx }) => renderPart(part, idx, idx === lastContentIdx))}

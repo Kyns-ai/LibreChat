@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { useRecoilValue } from 'recoil';
-import type { TMessageContentParts } from 'librechat-data-provider';
+import { type TMessageContentParts, isAgentsEndpoint } from 'librechat-data-provider';
 import type { TMessageProps, TMessageIcon } from '~/common';
 import { useMessageHelpers, useLocalize, useAttachments, useContentMetadata } from '~/hooks';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
@@ -77,6 +77,13 @@ export default function Message(props: TMessageProps) {
   );
 
   const { hasParallelContent } = useContentMetadata(message);
+  const showResponseTimer = useMemo(
+    () =>
+      !!conversation?.endpoint &&
+      !isAgentsEndpoint(conversation.endpoint) &&
+      !message.isCreatedByUser,
+    [conversation?.endpoint, message?.isCreatedByUser],
+  );
 
   if (!message) {
     return null;
@@ -154,6 +161,7 @@ export default function Message(props: TMessageProps) {
                     isCreatedByUser={message.isCreatedByUser}
                     conversationId={conversation?.conversationId}
                     isLatestMessage={messageId === latestMessage?.messageId}
+                    showResponseTimer={showResponseTimer}
                     content={message.content as Array<TMessageContentParts | undefined>}
                   />
                 </div>
