@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react';
-import { useLocalize } from '~/hooks/useLocalize';
+import { useLocalize } from '~/hooks';
 
 /**
  * Shows "Responding… Xs" while waiting for the first token in normal chat (not agents).
