@@ -4,7 +4,7 @@
 FROM node:20-alpine AS node
 
 # Install jemalloc
-RUN apk add --no-cache jemalloc
+RUN apk add --no-cache jemalloc su-exec
 RUN apk add --no-cache python3 py3-pip uv
 
 # Set environment variable to use jemalloc
@@ -51,6 +51,10 @@ RUN \
 # Node API setup
 EXPOSE 3080
 ENV HOST=0.0.0.0
+
+USER root
+RUN chmod +x /app/docker-entrypoint.sh
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["npm", "run", "backend"]
 
 # Optional: for client with nginx routing
