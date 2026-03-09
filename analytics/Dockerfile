@@ -1,8 +1,9 @@
+# KYNS Analytics Dashboard - Next.js 14 standalone
 FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --prefer-offline
 
 COPY . .
 RUN npm run build
@@ -14,13 +15,11 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser --system --uid 1001 nextjs && \
+    mkdir -p .next/static public
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-
-# Create public directory (may be empty but required)
-RUN mkdir -p ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
