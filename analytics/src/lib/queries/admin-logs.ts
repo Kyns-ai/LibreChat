@@ -1,0 +1,197 @@
+import { getCollection } from '../mongodb'
+
+export interface ErrorLog {
+  _id: string
+  conversationId: string
+  messageId: string
+  userId: string
+  errorType: 'error' | 'thinking_leak' | 'looping' | 'timeout'
+  model: string
+  endpoint: string
+  snippet: string
+  createdAt: Date
+}
+
+export interface ModerationItem {
+  _id: string
+  conversationId: string
+  userId: string
+  endpoint: string
+  agentId: string | null
+  createdAt: Date
+  messageCount: number
+  flagReason: string
+  status: 'pending' | 'reviewed' | 'ignored'
+}
+
+const THINKING_PATTERNS = ['<think>', '</think>', 'Thinking Process:', '<reasoning>', '</reasoning>']
+const LOOP_MIN_BLOCK = 80
+
+function detectThinkingLeak(text: string): boolean {
+  return THINKING_PATTERNS.some((p) => text.includes(p))
+}
+
+function detectLooping(text: string): boolean {
+  if (text.length < LOOP_MIN_BLOCK * 2) return false
+  const block = text.substring(0, LOOP_MIN_BLOCK)
+  return text.indexOf(block, LOOP_MIN_BLOCK) !== -1
+}
+
+export async function getErrorLogs(opts: {
+  type?: string
+  userId?: string
+  conversationId?: string
+  limit?: number
+  page?: number
+}): Promise<{ logs: ErrorLog[]; total: number }> {
+  const messages = await getCollection('messages')
+  const limit = Math.min(opts.limit ?? 50, 200)
+  const page = opts.page ?? 1
+  const skip = (page - 1) * limit
+
+  const match: Record<string, unknown> = { isCreatedByUser: false }
+  if (opts.userId) match['user'] = opts.userId
+  if (opts.conversationId) match['conversationId'] = opts.conversationId
+
+  const errorTypes: string[] = opts.type ? [opts.type] : ['error', 'thinking_leak', 'looping', 'timeout']
+
+  if (errorTypes.includes('error') && errorTypes.length === 1) {
+    match['error'] = true
+  }
+
+  const docs = await messages.find(match).sort({ createdAt: -1 }).limit(500).toArray()
+
+  const logs: ErrorLog[] = []
+  for (const d of docs) {
+    const doc = d as Record<string, unknown>
+    const text = String(doc.text ?? '')
+    const isError = doc.error === true
+    const isThink = detectThinkingLeak(text)
+    const isLoop = detectLooping(text)
+    const isTimeout = text.includes('timeout') || text.includes('timed out')
+
+    const types: ErrorLog['errorType'][] = []
+    if (isError && errorTypes.includes('error')) types.push('error')
+    if (isThink && errorTypes.includes('thinking_leak')) types.push('thinking_leak')
+    if (isLoop && errorTypes.includes('looping')) types.push('looping')
+    if (isTimeout && errorTypes.includes('timeout')) types.push('timeout')
+
+    for (const t of types) {
+      logs.push({
+        _id: String(d._id),
+        conversationId: String(doc.conversationId ?? ''),
+        messageId: String(doc.messageId ?? d._id),
+        userId: String(doc.user ?? ''),
+        errorType: t,
+        model: String(doc.model ?? ''),
+        endpoint: String(doc.endpoint ?? ''),
+        snippet: text.substring(0, 200),
+        createdAt: doc.createdAt as Date ?? new Date(),
+      })
+    }
+    if (logs.length >= 500) break
+  }
+
+  const total = logs.length
+  const paginated = logs.slice(skip, skip + limit)
+
+  return { logs: paginated, total }
+}
+
+export async function getModerationFeed(opts: {
+  status?: string
+  limit?: number
+  page?: number
+  keywords?: string[]
+}): Promise<{ items: ModerationItem[]; total: number }> {
+  const messages = await getCollection('messages')
+  const flagCol = await getCollection('kyns_moderation_flags')
+
+  const limit = opts.limit ?? 50
+  const page = opts.page ?? 1
+  const skip = (page - 1) * limit
+
+  const statusMatch: Record<string, unknown> = {}
+  if (opts.status && opts.status !== 'all') statusMatch['status'] = opts.status
+
+  const [flagged, total] = await Promise.all([
+    flagCol.find(statusMatch).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+    flagCol.countDocuments(statusMatch),
+  ])
+
+  const items: ModerationItem[] = flagged.map((f) => {
+    const doc = f as Record<string, unknown>
+    return {
+      _id: String(f._id),
+      conversationId: String(doc.conversationId ?? ''),
+      userId: String(doc.userId ?? ''),
+      endpoint: String(doc.endpoint ?? ''),
+      agentId: doc.agentId ? String(doc.agentId) : null,
+      createdAt: doc.createdAt as Date ?? new Date(),
+      messageCount: Number(doc.messageCount ?? 0),
+      flagReason: String(doc.flagReason ?? ''),
+      status: (doc.status as ModerationItem['status']) ?? 'pending',
+    }
+  })
+
+  // Auto-flag new conversations with keywords
+  if (opts.keywords?.length) {
+    const keywordRegex = new RegExp(opts.keywords.join('|'), 'i')
+    const recentMsgs = await messages.find({
+      createdAt: { $gte: new Date(Date.now() - 24 * 3600_000) },
+      isCreatedByUser: true,
+      text: { $regex: keywordRegex },
+    }).limit(100).toArray()
+
+    const existing = new Set(items.map((i) => i.conversationId))
+    for (const msg of recentMsgs) {
+      const doc = msg as Record<string, unknown>
+      const cid = String(doc.conversationId ?? '')
+      if (!existing.has(cid)) {
+        await flagCol.updateOne(
+          { conversationId: cid },
+          {
+            $setOnInsert: {
+              conversationId: cid,
+              userId: String(doc.user ?? ''),
+              endpoint: String(doc.endpoint ?? ''),
+              agentId: doc.agent_id ? String(doc.agent_id) : null,
+              createdAt: new Date(),
+              messageCount: 0,
+              flagReason: 'keyword_match',
+              status: 'pending',
+            },
+          },
+          { upsert: true }
+        )
+      }
+    }
+  }
+
+  return { items, total }
+}
+
+export async function updateModerationItem(id: string, status: string) {
+  const flagCol = await getCollection('kyns_moderation_flags')
+  const { ObjectId } = await import('mongodb')
+  try {
+    await flagCol.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status, reviewedAt: new Date() } }
+    )
+  } catch {
+    await flagCol.updateOne({ _id: id as unknown as import('mongodb').ObjectId }, { $set: { status, reviewedAt: new Date() } })
+  }
+}
+
+export async function flagConversation(conversationId: string, reason: string, userId: string) {
+  const flagCol = await getCollection('kyns_moderation_flags')
+  await flagCol.updateOne(
+    { conversationId },
+    {
+      $set: { flagReason: reason, status: 'pending', updatedAt: new Date() },
+      $setOnInsert: { conversationId, userId, createdAt: new Date(), messageCount: 0 },
+    },
+    { upsert: true }
+  )
+}
