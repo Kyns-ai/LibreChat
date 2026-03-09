@@ -1333,6 +1333,7 @@ export const imageGenTools = new Set([
   'stable-diffusion',
   'flux',
   'gemini_image_gen',
+  'kyns-image-gen',
 ]);
 
 /**

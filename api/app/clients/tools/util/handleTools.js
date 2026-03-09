@@ -29,6 +29,7 @@ const {
   // Structured Tools
   DALLE3,
   FluxAPI,
+  KynsImageGen,
   OpenWeather,
   StructuredSD,
   StructuredACS,
@@ -172,6 +173,7 @@ const loadTools = async ({
   imageOutputType,
 }) => {
   const toolConstructors = {
+    'kyns-image-gen': KynsImageGen,
     flux: FluxAPI,
     calculator: Calculator,
     google: GoogleSearchAPI,
@@ -245,6 +247,7 @@ const loadTools = async ({
   };
 
   const toolOptions = {
+    'kyns-image-gen': imageGenOptions,
     flux: imageGenOptions,
     dalle: imageGenOptions,
     'stable-diffusion': imageGenOptions,

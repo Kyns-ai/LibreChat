@@ -167,5 +167,18 @@
         "optional": true
       }
     ]
+  },
+  {
+    "name": "KYNS Image",
+    "pluginKey": "kyns-image-gen",
+    "description": "Generate images with KYNS AI (Lustify v7 or Z-Image Turbo). 10 images/day per user.",
+    "icon": "https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-32.png",
+    "authConfig": [
+      {
+        "authField": "RUNPOD_IMAGE_ENDPOINT_ID",
+        "label": "RunPod Image Endpoint ID",
+        "description": "RunPod serverless endpoint ID for image generation."
+      }
+    ]
   }
 ]

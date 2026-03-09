@@ -1,0 +1,8 @@
+runpod>=1.7.0
+torch>=2.3.0
+diffusers>=0.30.0
+transformers>=4.44.0
+accelerate>=0.33.0
+safetensors>=0.4.3
+Pillow>=10.0.0
+omegaconf>=2.3.0
