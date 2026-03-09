@@ -11,6 +11,7 @@ interface:
   bookmarks: true
   multiConvo: true
   agents: true
+  webSearch: true
   marketplace:
     use: true
 rateLimits:
@@ -211,3 +212,8 @@ endpoints:
         temperature: 0.6
         top_p: 0.95
         max_tokens: 16000
+
+webSearch:
+  searchProvider: "searxng"
+  searxngInstanceUrl: "${SEARXNG_INSTANCE_URL}"
+  safeSearch: 0
