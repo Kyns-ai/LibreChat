@@ -18,6 +18,8 @@ import { showThinkingAtom } from '~/store/showThinking';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 
+const PREVIEW_CHARS = 800;
+
 /**
  * ThinkingContent - Displays the actual thinking/reasoning content
  * Used by both legacy text-based messages and modern content parts
@@ -26,10 +28,28 @@ export const ThinkingContent: FC<{
   children: React.ReactNode;
 }> = memo(({ children }) => {
   const fontSize = useAtomValue(fontSizeAtom);
+  const localize = useLocalize();
+  const [showFull, setShowFull] = useState(false);
+
+  const text = typeof children === 'string' ? children : null;
+  const isTruncatable = text !== null && text.length > PREVIEW_CHARS;
+  const displayContent =
+    isTruncatable && !showFull ? text.slice(0, PREVIEW_CHARS) + '…' : children;
 
   return (
     <div className="relative rounded-3xl border border-border-medium bg-surface-tertiary p-4 pb-10 text-text-secondary">
-      <p className={cn('whitespace-pre-wrap leading-[26px]', fontSize)}>{children}</p>
+      <p className={cn('whitespace-pre-wrap leading-[26px]', fontSize)}>{displayContent}</p>
+      {isTruncatable && (
+        <button
+          type="button"
+          onClick={() => setShowFull((prev) => !prev)}
+          className="mt-2 text-xs text-text-secondary-alt underline hover:text-text-primary"
+        >
+          {showFull
+            ? localize('com_ui_show_less_reasoning')
+            : localize('com_ui_show_full_reasoning')}
+        </button>
+      )}
     </div>
   );
 });

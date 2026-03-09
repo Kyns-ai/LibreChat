@@ -192,6 +192,7 @@ endpoints:
         timeout: 300000
         chat_template_kwargs:
           enable_thinking: true
+          thinking_budget: 1024
         repetition_penalty: 1.1
         frequency_penalty: 0.1
         temperature: 0.6
