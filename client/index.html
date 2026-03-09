@@ -54,7 +54,7 @@
       /* Import conversations in Settings > Data (not relevant to consumers) */
       #import-conversation-label,
       [aria-labelledby="import-conversation-label"],
-      [aria-label="Import"] { display: none !important; }
+      div:has(> #import-conversation-label) { display: none !important; }
 
       /* Agent API Keys section in Settings > Data */
       [aria-labelledby="api-keys-label"],

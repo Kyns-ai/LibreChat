@@ -14,7 +14,7 @@ interface:
   webSearch: true
   temporaryChat: false
   runCode: false
-  customWelcome: "Olá, {{user.name}} — o que você quer saber hoje?"
+  customWelcome: "Olá — o que você quer saber hoje?"
   marketplace:
     use: true
 rateLimits:

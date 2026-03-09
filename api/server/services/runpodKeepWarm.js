@@ -10,7 +10,7 @@ const PING_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const PING_TIMEOUT_MS = 30_000;
 // BRT = UTC-3. Peak hours: 07:00–23:00 BRT → 10:00–02:00 UTC (next day)
 const PEAK_START_UTC = 10; // 07:00 BRT
-const PEAK_END_UTC = 2;    // 23:00 BRT (wraps past midnight)
+const PEAK_END_UTC = 3;    // 23:59 BRT = 02:59 UTC, inactive starts at 03:00 UTC
 
 function isRunpodServerless(baseURL) {
   return typeof baseURL === 'string' && baseURL.includes('api.runpod.ai/v2/');
@@ -23,7 +23,7 @@ function extractEndpointId(baseURL) {
 
 function isBrazilianPeakHour() {
   const hourUtc = new Date().getUTCHours();
-  // Peak: 10:00–23:59 UTC (07:00–20:59 BRT) AND 00:00–02:00 UTC (21:00–23:00 BRT)
+  // Peak: 10:00–23:59 UTC (07:00–20:59 BRT) AND 00:00–02:59 UTC (21:00–23:59 BRT)
   return hourUtc >= PEAK_START_UTC || hourUtc < PEAK_END_UTC;
 }
 
