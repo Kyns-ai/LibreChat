@@ -24,7 +24,7 @@ const kynsImageSchema = {
     model: {
       type: 'string',
       enum: ['lustify', 'zimage'],
-      description: '"lustify" for Lustify v7 (photorealistic). "zimage" for Z-Image Turbo (fast).',
+      description: '"lustify" for Lustify v7 (SDXL, photorealistic/NSFW, 30 steps). "zimage" for Z-Image Turbo (DiT, fast high-quality, 8 steps).',
     },
     width: {
       type: 'integer',
@@ -149,7 +149,8 @@ class KynsImageGen extends Tool {
     this.description_for_model = `// Generate high-quality images from text descriptions.
 // Rules:
 // - ALWAYS write detailed prompts (10+ words about subject, style, lighting, composition, mood).
-// - Default model is "lustify" unless user requests something different.
+// - Default model is "lustify" unless user wants fast generation (then use "zimage").
+// - Use "zimage" for faster or non-NSFW generation; use "lustify" for photorealistic/NSFW.
 // - Default size 1024x1024. Use 1024x1792 for portraits, 1792x1024 for landscapes.
 // - ALWAYS show the image in your response using the markdown that is returned.
 // - Users have a limit of ${DAILY_LIMIT} images per day.`;

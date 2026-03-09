@@ -1,8 +1,9 @@
 """
 KYNS Image Generation Worker — RunPod Serverless
-Supports: Lustify v7 (SDXL) and Z-Image Turbo (SDXL)
-Both models are loaded at startup for FlashBoot optimization.
-Models should be pre-downloaded to the network volume via download_models.sh.
+GPU: A40 (48GB VRAM)
+Models:
+  - Lustify v7 (SDXL 1.0 FP16 safetensors) — from CivitAI via network volume
+  - Z-Image Turbo (DiT 6B BF16) — from HuggingFace via network volume cache
 """
 
 import os
@@ -15,36 +16,50 @@ from PIL import Image
 
 VOLUME_PATH = os.environ.get("VOLUME_PATH", "/runpod-volume")
 MODEL_DIR = os.path.join(VOLUME_PATH, "models", "checkpoints")
+HF_CACHE = os.path.join(VOLUME_PATH, "hf-cache")
 
-MODELS = {
-    "lustify": os.environ.get("LUSTIFY_MODEL", "lustifySDXLNSFW_ggwpV7.safetensors"),
-    "zimage": os.environ.get("ZIMAGE_MODEL", "zImageTurbo_v1.safetensors"),
-}
+LUSTIFY_FILENAME = os.environ.get("LUSTIFY_MODEL", "lustifySDXLNSFW_ggwpV7.safetensors")
+LUSTIFY_PATH = os.path.join(MODEL_DIR, LUSTIFY_FILENAME)
+ZIMAGE_REPO = "Tongyi-MAI/Z-Image-Turbo"
+
+os.environ.setdefault("HF_HOME", HF_CACHE)
+os.environ.setdefault("TRANSFORMERS_CACHE", HF_CACHE)
 
 pipes = {}
 
 
-def load_sdxl_model(model_key: str):
-    """Load a safetensors SDXL checkpoint from the network volume."""
-    if model_key in pipes:
-        return pipes[model_key]
+def _download_lustify():
+    import requests
+
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    token = os.environ.get("CIVITAI_TOKEN", "")
+    url = "https://civitai.com/api/download/models/2155386"
+    if token:
+        url += f"?token={token}"
+
+    print(f"[startup] Downloading Lustify v7 GGWP to {LUSTIFY_PATH}...")
+    with requests.get(url, stream=True, timeout=300, allow_redirects=True) as r:
+        r.raise_for_status()
+        with open(LUSTIFY_PATH, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 1024):
+                f.write(chunk)
+    print(f"[startup] Lustify v7 download complete ({os.path.getsize(LUSTIFY_PATH) // 1_000_000} MB)")
+
+
+def load_lustify():
+    if "lustify" in pipes:
+        return pipes["lustify"]
 
     from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler
 
-    filename = MODELS.get(model_key)
-    if not filename:
-        raise ValueError(f"Unknown model key: {model_key}")
+    if not os.path.exists(LUSTIFY_PATH):
+        _download_lustify()
 
-    path = os.path.join(MODEL_DIR, filename)
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Model not found at {path}. Run download_models.sh first.")
-
-    print(f"[startup] Loading {model_key} from {path} ...")
+    print(f"[startup] Loading Lustify v7 from {LUSTIFY_PATH}...")
     pipe = StableDiffusionXLPipeline.from_single_file(
-        path,
+        LUSTIFY_PATH,
         torch_dtype=torch.float16,
         use_safetensors=True,
-        variant="fp16",
     )
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(
         pipe.scheduler.config,
@@ -53,49 +68,39 @@ def load_sdxl_model(model_key: str):
     )
     pipe.to("cuda")
     pipe.enable_attention_slicing()
-
-    # Compile unet for faster inference on A40 (optional, first call slower)
-    # pipe.unet = torch.compile(pipe.unet, mode="reduce-overhead", fullgraph=True)
-
-    pipes[model_key] = pipe
-    print(f"[startup] {model_key} loaded OK")
+    pipes["lustify"] = pipe
+    print("[startup] Lustify v7 loaded OK")
     return pipe
 
 
-def image_to_base64(image: Image.Image) -> str:
+def load_zimage():
+    if "zimage" in pipes:
+        return pipes["zimage"]
+
+    from diffusers import ZImagePipeline
+
+    os.makedirs(HF_CACHE, exist_ok=True)
+    print(f"[startup] Loading Z-Image Turbo from HuggingFace (cache: {HF_CACHE})...")
+    pipe = ZImagePipeline.from_pretrained(
+        ZIMAGE_REPO,
+        torch_dtype=torch.bfloat16,
+        cache_dir=HF_CACHE,
+        low_cpu_mem_usage=False,
+    )
+    pipe.to("cuda")
+    pipes["zimage"] = pipe
+    print("[startup] Z-Image Turbo loaded OK")
+    return pipe
+
+
+def image_to_base64(image):
     buffer = io.BytesIO()
     image.save(buffer, format="PNG", optimize=False)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def handler(job):
-    inp = job.get("input", {})
-
-    prompt = inp.get("prompt", "")
-    if not prompt:
-        return {"error": "prompt is required"}
-
-    negative_prompt = inp.get(
-        "negative_prompt", "lowres, blurry, bad anatomy, worst quality, low quality, watermark"
-    )
-    model_key = str(inp.get("model", "lustify")).lower()
-    width = max(64, int(inp.get("width", 1024)) // 8 * 8)
-    height = max(64, int(inp.get("height", 1024)) // 8 * 8)
-    steps = min(50, max(1, int(inp.get("steps", 30))))
-    cfg_scale = float(inp.get("cfg_scale", 7.0))
-    seed_val = inp.get("seed")
-
-    if model_key not in MODELS:
-        return {"error": f"Unknown model '{model_key}'. Use 'lustify' or 'zimage'."}
-
-    try:
-        pipe = load_sdxl_model(model_key)
-    except FileNotFoundError as e:
-        return {"error": str(e)}
-
-    seed = int(seed_val) if seed_val is not None else random.randint(0, 2**32 - 1)
+def generate_lustify(pipe, prompt, negative_prompt, width, height, steps, cfg_scale, seed):
     generator = torch.Generator(device="cuda").manual_seed(seed)
-
     with torch.inference_mode():
         result = pipe(
             prompt=prompt,
@@ -107,20 +112,63 @@ def handler(job):
             generator=generator,
             num_images_per_prompt=1,
         )
-
-    image = result.images[0]
-    b64 = image_to_base64(image)
-
-    return {"image": b64, "seed": seed, "model": model_key}
+    return result.images[0]
 
 
-# Pre-load all available models at startup so FlashBoot can snapshot them
-for key in list(MODELS.keys()):
+def generate_zimage(pipe, prompt, width, height, seed):
+    generator = torch.Generator(device="cuda").manual_seed(seed)
+    with torch.inference_mode():
+        result = pipe(
+            prompt=prompt,
+            height=height,
+            width=width,
+            num_inference_steps=9,
+            guidance_scale=0.0,
+            generator=generator,
+            num_images_per_prompt=1,
+        )
+    return result.images[0]
+
+
+def handler(job):
+    inp = job.get("input", {})
+
+    prompt = inp.get("prompt", "")
+    if not prompt:
+        return {"error": "prompt is required"}
+
+    negative_prompt = inp.get(
+        "negative_prompt",
+        "lowres, blurry, bad anatomy, worst quality, low quality, watermark",
+    )
+    model_key = str(inp.get("model", "lustify")).lower()
+    width = max(64, int(inp.get("width", 1024)) // 8 * 8)
+    height = max(64, int(inp.get("height", 1024)) // 8 * 8)
+    steps = min(50, max(1, int(inp.get("steps", 30))))
+    cfg_scale = float(inp.get("cfg_scale", 7.0))
+    seed_val = inp.get("seed")
+    seed = int(seed_val) if seed_val is not None else random.randint(0, 2**32 - 1)
+
     try:
-        load_sdxl_model(key)
-    except FileNotFoundError as e:
-        print(f"[startup] Skipping {key}: {e}")
+        if model_key == "zimage":
+            pipe = load_zimage()
+            image = generate_zimage(pipe, prompt, width, height, seed)
+        elif model_key == "lustify":
+            pipe = load_lustify()
+            image = generate_lustify(pipe, prompt, negative_prompt, width, height, steps, cfg_scale, seed)
+        else:
+            return {"error": f"Unknown model '{model_key}'. Use 'lustify' or 'zimage'."}
     except Exception as e:
-        print(f"[startup] Error loading {key}: {e}")
+        return {"error": f"Generation failed: {str(e)}"}
+
+    return {"image": image_to_base64(image), "seed": seed, "model": model_key}
+
+
+# Pre-load all models at startup so FlashBoot can snapshot them
+for _key, _loader in [("lustify", load_lustify), ("zimage", load_zimage)]:
+    try:
+        _loader()
+    except Exception as _e:
+        print(f"[startup] Warning: could not load {_key}: {_e}")
 
 runpod.serverless.start({"handler": handler})

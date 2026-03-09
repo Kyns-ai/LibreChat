@@ -1,8 +1,12 @@
-runpod>=1.7.0
-torch>=2.3.0
-diffusers>=0.30.0
-transformers>=4.44.0
-accelerate>=0.33.0
-safetensors>=0.4.3
-Pillow>=10.0.0
-omegaconf>=2.3.0
+runpod
+torch
+# diffusers from source — required for ZImagePipeline (merged in latest release)
+git+https://github.com/huggingface/diffusers
+transformers
+accelerate
+safetensors
+Pillow
+omegaconf
+huggingface_hub
+requests
+xformers

@@ -35,6 +35,7 @@ const noIndex = require('./middleware/noIndex');
 const { seedDatabase } = require('~/models');
 const routes = require('./routes');
 const { startKeepWarm } = require('./services/runpodKeepWarm');
+const { seedKynsImageAgent } = require('./services/kynsImageAgentSeed');
 
 const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
 
@@ -210,6 +211,7 @@ const startServer = async () => {
     GenerationJobManager.configure(streamServices);
     GenerationJobManager.initialize();
     startKeepWarm();
+    seedKynsImageAgent();
 
     const inspectFlags = process.execArgv.some((arg) => arg.startsWith('--inspect'));
     if (inspectFlags || isEnabled(process.env.MEM_DIAG)) {
