@@ -124,11 +124,10 @@ function ChatView({ index = 0 }: { index?: number }) {
   });
 
   let content: JSX.Element | null | undefined;
+  const hasEffectiveMessages = effectiveMessagesTree != null && effectiveMessagesTree.length > 0;
   const isLandingPage =
-    (!effectiveMessagesTree || effectiveMessagesTree.length === 0) &&
-    (conversationId === Constants.NEW_CONVO || !conversationId);
-  const isNavigating =
-    (!messagesTree || messagesTree.length === 0) && conversationId != null;
+    !hasEffectiveMessages && (conversationId === Constants.NEW_CONVO || !conversationId);
+  const isNavigating = !hasEffectiveMessages && conversationId != null;
 
   if (isLoading && conversationId !== Constants.NEW_CONVO) {
     content = <LoadingSpinner />;

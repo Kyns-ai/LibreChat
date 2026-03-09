@@ -437,6 +437,40 @@ describe('useStepHandler', () => {
       );
     });
 
+    it('should not duplicate cumulative text deltas', () => {
+      const responseMessage = createResponseMessage();
+      mockGetMessages.mockReturnValue([responseMessage]);
+
+      const { result } = renderHook(() => useStepHandler(createHookParams()));
+
+      const runStep = createRunStep();
+      const submission = createSubmission();
+
+      act(() => {
+        result.current.stepHandler({ event: 'on_run_step', data: runStep }, submission);
+      });
+
+      act(() => {
+        result.current.stepHandler(
+          { event: 'on_message_delta', data: createMessageDelta('step-1', 'Hello') },
+          submission,
+        );
+      });
+
+      act(() => {
+        result.current.stepHandler(
+          { event: 'on_message_delta', data: createMessageDelta('step-1', 'Hello World') },
+          submission,
+        );
+      });
+
+      const lastCall = mockSetMessages.mock.calls[mockSetMessages.mock.calls.length - 1][0];
+      const responseMsg = lastCall[lastCall.length - 1];
+      expect(responseMsg.content).toContainEqual(
+        expect.objectContaining({ type: ContentTypes.TEXT, text: 'Hello World' }),
+      );
+    });
+
     it('should return early when contentPart is null', () => {
       const responseMessage = createResponseMessage();
       mockGetMessages.mockReturnValue([responseMessage]);
@@ -547,6 +581,43 @@ describe('useStepHandler', () => {
         expect.objectContaining({ type: ContentTypes.THINK, think: 'First thought' }),
       );
     });
+
+    it('should not duplicate cumulative reasoning deltas', () => {
+      const responseMessage = createResponseMessage();
+      mockGetMessages.mockReturnValue([responseMessage]);
+
+      const { result } = renderHook(() => useStepHandler(createHookParams()));
+
+      const runStep = createRunStep();
+      const submission = createSubmission();
+
+      act(() => {
+        result.current.stepHandler({ event: 'on_run_step', data: runStep }, submission);
+      });
+
+      act(() => {
+        result.current.stepHandler(
+          { event: 'on_reasoning_delta', data: createReasoningDelta('step-1', 'First') },
+          submission,
+        );
+      });
+
+      act(() => {
+        result.current.stepHandler(
+          {
+            event: 'on_reasoning_delta',
+            data: createReasoningDelta('step-1', 'First thought'),
+          },
+          submission,
+        );
+      });
+
+      const lastCall = mockSetMessages.mock.calls[mockSetMessages.mock.calls.length - 1][0];
+      const responseMsg = lastCall[lastCall.length - 1];
+      expect(responseMsg.content).toContainEqual(
+        expect.objectContaining({ type: ContentTypes.THINK, think: 'First thought' }),
+      );
+    });
   });
 
   describe('on_run_step_delta event', () => {
@@ -578,6 +649,59 @@ describe('useStepHandler', () => {
       });
 
       expect(mockSetMessages).toHaveBeenCalled();
+    });
+
+    it('should not duplicate cumulative tool call args', () => {
+      const responseMessage = createResponseMessage();
+      mockGetMessages.mockReturnValue([responseMessage]);
+
+      const { result } = renderHook(() => useStepHandler(createHookParams()));
+
+      const runStep = createToolCallRunStep();
+      const submission = createSubmission();
+
+      act(() => {
+        result.current.stepHandler({ event: 'on_run_step', data: runStep }, submission);
+      });
+
+      act(() => {
+        result.current.stepHandler(
+          {
+            event: 'on_run_step_delta',
+            data: {
+              id: 'step-tool-1',
+              delta: {
+                type: StepTypes.TOOL_CALLS,
+                tool_calls: [{ name: 'test_tool', args: '{"k":' }],
+              },
+            } as Agents.RunStepDeltaEvent,
+          },
+          submission,
+        );
+      });
+
+      act(() => {
+        result.current.stepHandler(
+          {
+            event: 'on_run_step_delta',
+            data: {
+              id: 'step-tool-1',
+              delta: {
+                type: StepTypes.TOOL_CALLS,
+                tool_calls: [{ name: 'test_tool', args: '{"k":"v"}' }],
+              },
+            } as Agents.RunStepDeltaEvent,
+          },
+          submission,
+        );
+      });
+
+      const lastCall = mockSetMessages.mock.calls[mockSetMessages.mock.calls.length - 1][0];
+      const responseMsg = lastCall.find((m: TMessage) => !m.isCreatedByUser);
+      const toolCallContent = responseMsg?.content?.find(
+        (c: TMessageContentParts) => c.type === ContentTypes.TOOL_CALL,
+      );
+      expect(toolCallContent?.tool_call?.args).toBe('{"k":"v"}');
     });
 
     it('should buffer run step delta when step does not exist', () => {

@@ -22,6 +22,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilValue } from 'recoil';
 import useQueryParams from './useQueryParams';
+import { PermissionBits, QueryKeys } from 'librechat-data-provider';
 import { useChatContext, useChatFormContext } from '~/Providers';
 import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
@@ -66,14 +67,19 @@ jest.mock('~/hooks/Agents/useAgentDefaultPermissionLevel', () => ({
 }));
 
 jest.mock('~/utils', () => {
-  const actualUtils = jest.requireActual('~/utils');
   return {
-    ...actualUtils,
-    // Only mock logger to suppress test output
+    clearModelForNonEphemeralAgent: jest.fn(),
+    removeUnavailableTools: jest.fn((preset) => preset),
+    getModelSpecIconURL: jest.fn(() => 'icon-url'),
+    getConvoSwitchLogic: jest.fn(() => ({
+      template: {},
+      shouldSwitch: false,
+      isNewModular: false,
+      newEndpointType: undefined,
+      isCurrentModular: false,
+      isExistingConversation: false,
+    })),
     logger: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
-    // Mock theme utilities that interact with DOM
-    getInitialTheme: jest.fn(() => 'light'),
-    applyFontSize: jest.fn(),
   };
 });
 
@@ -289,6 +295,45 @@ describe('useQueryParams', () => {
     );
     expect(mockHandleSubmit).toHaveBeenCalled();
     expect(mockSubmitMessage).toHaveBeenCalled();
+  });
+
+  it('injects URL agent into both view and edit caches', () => {
+    const mockSetQueryData = jest.fn();
+    const mockTextAreaRef = {
+      current: {
+        focus: jest.fn(),
+        setSelectionRange: jest.fn(),
+      } as unknown as HTMLTextAreaElement,
+    };
+    const urlAgent = {
+      id: 'agent-from-url',
+      name: 'URL Agent',
+    };
+
+    const dataProvider = jest.requireMock('~/data-provider');
+    (dataProvider.useGetAgentByIdQuery as jest.Mock).mockReturnValue({
+      data: urlAgent,
+      isLoading: false,
+      error: null,
+    });
+
+    (useQueryClient as jest.Mock).mockReturnValue({
+      getQueryData: jest.fn().mockReturnValue(null),
+      setQueryData: mockSetQueryData,
+    });
+
+    setUrlParams({ agent_id: urlAgent.id });
+
+    renderHook(() => useQueryParams({ textAreaRef: mockTextAreaRef }));
+
+    expect(mockSetQueryData).toHaveBeenCalledWith(
+      [QueryKeys.agents, { requiredPermission: PermissionBits.VIEW }],
+      expect.any(Function),
+    );
+    expect(mockSetQueryData).toHaveBeenCalledWith(
+      [QueryKeys.agents, { requiredPermission: PermissionBits.EDIT }],
+      expect.any(Function),
+    );
   });
 
   it('should defer submission when settings need to be applied first', () => {

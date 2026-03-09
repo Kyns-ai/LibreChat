@@ -1,6 +1,6 @@
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { useRef, useMemo, useEffect, useState } from 'react';
-import { parseTextParts } from 'librechat-data-provider';
+import { extractThinkingContent, parseTextParts } from 'librechat-data-provider';
 import type { TMessageContentParts } from 'librechat-data-provider';
 import type { Option } from '~/common';
 import useTextToSpeechExternal from '~/hooks/Input/useTextToSpeechExternal';
@@ -120,7 +120,9 @@ const useTextToSpeech = (props?: TUseTextToSpeech) => {
       if (isMouseDownRef.current) {
         const messageContent = content ?? '';
         const parsedMessage =
-          typeof messageContent === 'string' ? messageContent : parseTextParts(messageContent);
+          typeof messageContent === 'string'
+            ? extractThinkingContent(messageContent).regularContent
+            : parseTextParts(messageContent, true);
         generateSpeech(parsedMessage, false);
       }
     }, 1000);
@@ -140,7 +142,9 @@ const useTextToSpeech = (props?: TUseTextToSpeech) => {
     } else {
       const messageContent = content ?? '';
       const parsedMessage =
-        typeof messageContent === 'string' ? messageContent : parseTextParts(messageContent);
+        typeof messageContent === 'string'
+          ? extractThinkingContent(messageContent).regularContent
+          : parseTextParts(messageContent, true);
       generateSpeech(parsedMessage, false);
     }
   };

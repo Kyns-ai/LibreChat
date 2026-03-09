@@ -56,6 +56,10 @@ const { loadAgent } = require('~/models/Agent');
 const { getMCPManager } = require('~/config');
 const db = require('~/models');
 
+const DEFAULT_AGENT_RECURSION_LIMIT = 16;
+const MEMORY_CONTEXT_TIMEOUT_MS = 1500;
+const SLOW_STAGE_THRESHOLD_MS = 200;
+
 class AgentClient extends BaseClient {
   constructor(options = {}) {
     super(null, options);
@@ -307,14 +311,18 @@ class AgentClient extends BaseClient {
 
     /** Augmented prompt from RAG/context handlers */
     if (this.contextHandlers) {
+      const contextStart = Date.now();
       this.augmentedPrompt = await this.contextHandlers.createContext();
+      this.logSlowStage('createContext', contextStart);
       if (this.augmentedPrompt) {
         sharedRunContextParts.push(this.augmentedPrompt);
       }
     }
 
     /** Memory context (user preferences/memories) */
-    const withoutKeys = await this.useMemory();
+    const memoryStart = Date.now();
+    const withoutKeys = await this.awaitMemoryContextWithTimeout(this.useMemory());
+    this.logSlowStage('loadMemoryContext', memoryStart);
     if (withoutKeys) {
       const memoryContext = `${memoryInstructions}\n\n# Existing memory about the user:\n${withoutKeys}`;
       sharedRunContextParts.push(memoryContext);
@@ -326,10 +334,12 @@ class AgentClient extends BaseClient {
     let tokenCountMap;
 
     if (this.contextStrategy) {
+      const contextStrategyStart = Date.now();
       ({ payload, promptTokens, tokenCountMap, messages } = await this.handleContextStrategy({
         orderedMessages,
         formattedMessages,
       }));
+      this.logSlowStage('handleContextStrategy', contextStrategyStart);
     }
 
     for (let i = 0; i < messages.length; i++) {
@@ -398,6 +408,53 @@ class AgentClient extends BaseClient {
       }
       return;
     }
+  }
+
+  /**
+   * Keeps slow memory lookup from blocking the start of the current turn.
+   * @param {Promise<string | undefined> | undefined} memoryPromise
+   * @param {number} timeoutMs
+   * @returns {Promise<string | undefined>}
+   */
+  async awaitMemoryContextWithTimeout(memoryPromise, timeoutMs = MEMORY_CONTEXT_TIMEOUT_MS) {
+    if (!memoryPromise) {
+      return;
+    }
+
+    let timeoutId;
+    const timeoutPromise = new Promise((resolve) => {
+      timeoutId = setTimeout(() => {
+        logger.warn(`[AgentClient] Memory context timed out after ${timeoutMs}ms`);
+        resolve(undefined);
+      }, timeoutMs);
+    });
+
+    const guardedPromise = Promise.resolve(memoryPromise)
+      .then((value) => {
+        clearTimeout(timeoutId);
+        return value;
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        logger.error('[AgentClient] Error loading memory context:', error);
+        return;
+      });
+
+    return await Promise.race([guardedPromise, timeoutPromise]);
+  }
+
+  /**
+   * @param {string} stage
+   * @param {number} startTime
+   * @param {number} thresholdMs
+   */
+  logSlowStage(stage, startTime, thresholdMs = SLOW_STAGE_THRESHOLD_MS) {
+    const elapsedMs = Date.now() - startTime;
+    if (elapsedMs < thresholdMs) {
+      return;
+    }
+
+    logger.debug(`[AgentClient] ${stage} took ${elapsedMs}ms`);
   }
 
   /**
@@ -738,7 +795,7 @@ class AgentClient extends BaseClient {
           },
           user: createSafeUser(this.options.req.user),
         },
-        recursionLimit: agentsEConfig?.recursionLimit ?? 50,
+        recursionLimit: agentsEConfig?.recursionLimit ?? DEFAULT_AGENT_RECURSION_LIMIT,
         signal: abortController.signal,
         streamMode: 'values',
         version: 'v2',
@@ -803,6 +860,7 @@ class AgentClient extends BaseClient {
 
         memoryPromise = this.runMemory(messages);
 
+        const createRunStart = Date.now();
         run = await createRun({
           agents,
           messages,
@@ -814,6 +872,7 @@ class AgentClient extends BaseClient {
           user: createSafeUser(this.options.req?.user),
           tokenCounter: createTokenCounter(this.getEncoding()),
         });
+        this.logSlowStage('createRun', createRunStart);
 
         if (!run) {
           throw new Error('Failed to create run');
@@ -862,6 +921,9 @@ class AgentClient extends BaseClient {
         '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
         err,
       );
+      if (err?.stack) {
+        logger.error('[sendCompletion] Stack trace:', err.stack);
+      }
       if (!abortController.signal.aborted) {
         logger.error(
           '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',

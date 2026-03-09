@@ -573,6 +573,23 @@ describe('getOpenAILLMConfig', () => {
 
       expect(result.llmConfig.modelKwargs).toHaveProperty('custom_param', 'custom_value');
     });
+
+    it('should preserve chat_template_kwargs via modelKwargs for OpenAI-compatible providers', () => {
+      const result = getOpenAILLMConfig({
+        apiKey: 'test-api-key',
+        streaming: true,
+        modelOptions: {
+          model: 'gpt-4',
+        },
+        addParams: {
+          chat_template_kwargs: { enable_thinking: false },
+        },
+      });
+
+      expect(result.llmConfig.modelKwargs).toHaveProperty('chat_template_kwargs', {
+        enable_thinking: false,
+      });
+    });
   });
 
   describe('Drop Parameters', () => {

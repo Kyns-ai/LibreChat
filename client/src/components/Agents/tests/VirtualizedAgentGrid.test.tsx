@@ -5,6 +5,14 @@ import { jest } from '@jest/globals';
 import VirtualizedAgentGrid from '../VirtualizedAgentGrid';
 import type t from 'librechat-data-provider';
 
+jest.mock('@librechat/client', () => ({
+  Spinner: ({ className }: { className?: string }) => (
+    <div data-testid="spinner" className={`spinner ${className ?? ''}`.trim()}>
+      Loading
+    </div>
+  ),
+}), { virtual: true });
+
 // Mock react-virtualized
 jest.mock('react-virtualized', () => ({
   AutoSizer: ({
@@ -131,9 +139,15 @@ jest.mock('../SmartLoader', () => ({
 }));
 
 jest.mock('../AgentCard', () => {
-  return function MockAgentCard({ agent, onClick }: { agent: t.Agent; onClick: () => void }) {
+  return function MockAgentCard({
+    agent,
+    onSelect,
+  }: {
+    agent: t.Agent;
+    onSelect?: (agent: t.Agent) => void;
+  }) {
     return (
-      <div data-testid={`agent-card-${agent.id}`} onClick={onClick}>
+      <div data-testid={`agent-card-${agent.id}`} onClick={() => onSelect?.(agent)}>
         <h3>{agent.name}</h3>
         <p>{agent.description}</p>
       </div>

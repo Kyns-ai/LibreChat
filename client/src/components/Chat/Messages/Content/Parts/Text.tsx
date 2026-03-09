@@ -6,7 +6,8 @@ import { useMessageContext } from '~/Providers';
 import { cn } from '~/utils';
 import store from '~/store';
 
-const CHARS_PER_FRAME = 4;
+const MIN_CHARS_PER_FRAME = 16;
+const TARGET_STREAM_FRAMES = 48;
 
 type TextPartProps = {
   text: string;
@@ -41,7 +42,8 @@ const TextPart = memo(({ text, isCreatedByUser, showCursor }: TextPartProps) => 
     const tick = () => {
       setDisplayedLength((current) => {
         const target = targetLenRef.current;
-        const next = Math.min(current + CHARS_PER_FRAME, target);
+        const charsPerFrame = Math.max(MIN_CHARS_PER_FRAME, Math.ceil(target / TARGET_STREAM_FRAMES));
+        const next = Math.min(current + charsPerFrame, target);
         if (next < target) {
           rafRef.current = requestAnimationFrame(tick);
         }

@@ -8,6 +8,7 @@ import { PermissionTypes, Permissions, QueryKeys } from 'librechat-data-provider
 import type t from 'librechat-data-provider';
 import type { ContextType } from '~/common';
 import { useDocumentTitle, useHasAccess, useLocalize, TranslationKeys } from '~/hooks';
+import useStartAgentChat from '~/hooks/Agents/useStartAgentChat';
 import { useGetEndpointsQuery, useGetAgentCategoriesQuery } from '~/data-provider';
 import MarketplaceAdminSettings from './MarketplaceAdminSettings';
 import { SidePanelProvider, useChatContext } from '~/Providers';
@@ -37,6 +38,7 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { conversation, newConversation } = useChatContext();
+  const startAgentChat = useStartAgentChat();
 
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const { navVisible, setNavVisible } = useOutletContext<ContextType>();
@@ -96,12 +98,10 @@ const AgentMarketplace: React.FC<AgentMarketplaceProps> = ({ className = '' }) =
   }, [category, categoriesQuery.data, displayCategory]);
 
   /**
-   * Handle agent card selection - updates URL for deep linking
+   * Handle agent card selection with the same bootstrap used elsewhere
    */
   const handleAgentSelect = (agent: t.Agent) => {
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set('agent_id', agent.id);
-    setSearchParams(newParams);
+    startAgentChat(agent);
   };
 
   /**

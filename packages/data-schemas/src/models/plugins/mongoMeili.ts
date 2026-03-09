@@ -391,7 +391,7 @@ const createMeiliMongooseModel = ({
       }
 
       if (object.content && Array.isArray(object.content)) {
-        object.text = parseTextParts(object.content);
+        object.text = parseTextParts(object.content, true);
         delete object.content;
       }
 

@@ -5,6 +5,7 @@ import {
   ToolCallTypes,
   imageGenTools,
   isImageVisionTool,
+  extractThinkingContent,
 } from 'librechat-data-provider';
 import { memo } from 'react';
 import type { TMessageContentParts, TAttachment } from 'librechat-data-provider';
@@ -30,6 +31,30 @@ type PartProps = {
 
 const Part = memo(
   ({ part, isSubmitting, attachments, isLast, showCursor, isCreatedByUser }: PartProps) => {
+    const renderTextSegment = (
+      text: string,
+      key: string,
+      segmentShowCursor: boolean = false,
+    ) => {
+      if (text.length > 0 && /^\s*$/.test(text)) {
+        if (isLast && segmentShowCursor) {
+          return (
+            <Container key={key}>
+              <EmptyText />
+            </Container>
+          );
+        }
+
+        return null;
+      }
+
+      return (
+        <Container key={key}>
+          <Text text={text} isCreatedByUser={isCreatedByUser} showCursor={segmentShowCursor} />
+        </Container>
+      );
+    };
+
     if (!part) {
       return null;
     }
@@ -64,28 +89,44 @@ const Part = memo(
       if (typeof text !== 'string') {
         return null;
       }
-      if (part.tool_call_ids != null && !text) {
+      const extracted = extractThinkingContent(text);
+      if (part.tool_call_ids != null && extracted.regularContent.length === 0) {
         return null;
       }
-      /** Handle whitespace-only text to avoid layout shift */
-      if (text.length > 0 && /^\s*$/.test(text)) {
-        /** Show placeholder for whitespace-only last part during streaming */
-        if (isLast && showCursor) {
-          return (
-            <Container>
-              <EmptyText />
-            </Container>
-          );
-        }
-        /** Skip rendering non-last whitespace-only parts to avoid empty Container */
-        if (!isLast) {
-          return null;
-        }
+
+      const hasInlineThinking = extracted.segments.some((segment) => segment.type === 'think');
+      if (!hasInlineThinking) {
+        return renderTextSegment(text, `${part.type}-text`, showCursor);
       }
+
+      const lastVisibleSegmentIndex = extracted.segments.reduce((lastIndex, segment, index) => {
+        if (segment.type === 'text') {
+          return index;
+        }
+
+        return lastIndex;
+      }, -1);
+
       return (
-        <Container>
-          <Text text={text} isCreatedByUser={isCreatedByUser} showCursor={showCursor} />
-        </Container>
+        <>
+          {extracted.segments.map((segment, index) => {
+            if (segment.type === 'think') {
+              return (
+                <Reasoning
+                  key={`${part.type}-thinking-${index}`}
+                  reasoning={segment.content}
+                  isLast={isLast ?? false}
+                />
+              );
+            }
+
+            return renderTextSegment(
+              segment.content,
+              `${part.type}-text-${index}`,
+              showCursor && index === lastVisibleSegmentIndex,
+            );
+          })}
+        </>
       );
     } else if (part.type === ContentTypes.THINK) {
       const reasoning = typeof part.think === 'string' ? part.think : part.think?.value;

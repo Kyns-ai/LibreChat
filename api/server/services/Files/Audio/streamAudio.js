@@ -3,6 +3,7 @@ const {
   CacheKeys,
   SEPARATORS,
   parseTextParts,
+  extractThinkingContent,
   findLastSeparatorIndex,
 } = require('librechat-data-provider');
 const { getMessage } = require('~/models/Message');
@@ -90,7 +91,10 @@ function createChunkProcessor(user, messageId) {
       notFoundCount++;
       return [];
     } else {
-      const text = message.content?.length > 0 ? parseTextParts(message.content) : message.text;
+      const text =
+        message.content?.length > 0
+          ? parseTextParts(message.content, true)
+          : extractThinkingContent(message.text ?? '').regularContent;
       messageCache.set(
         messageId,
         {
@@ -101,7 +105,10 @@ function createChunkProcessor(user, messageId) {
       );
     }
 
-    const text = typeof message === 'string' ? message : message.text;
+    const text =
+      typeof message === 'string'
+        ? extractThinkingContent(message).regularContent
+        : extractThinkingContent(message.text ?? '').regularContent;
     const complete = typeof message === 'string' ? false : (message.complete ?? true);
 
     if (text === processedText) {

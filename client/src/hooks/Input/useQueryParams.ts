@@ -8,10 +8,9 @@ import {
   isAgentsEndpoint,
   tQueryParamsSchema,
   isAssistantsEndpoint,
-  PermissionBits,
 } from 'librechat-data-provider';
 import type {
-  AgentListResponse,
+  Agent,
   TEndpointsConfig,
   TStartupConfig,
   TPreset,
@@ -24,9 +23,11 @@ import {
   getConvoSwitchLogic,
   logger,
 } from '~/utils';
-import { useAuthContext, useAgentsMap, useDefaultConvo, useSubmitMessage } from '~/hooks';
 import { useChatContext, useChatFormContext } from '~/Providers';
+import useSubmitMessage from '~/hooks/Messages/useSubmitMessage';
+import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
 import { useGetAgentByIdQuery } from '~/data-provider';
+import { upsertAgentListCaches } from '~/utils/agentCache';
 import store from '~/store';
 
 /**
@@ -85,19 +86,9 @@ const processValidSettings = (queryParams: Record<string, string>) => {
   return validSettings;
 };
 
-const injectAgentIntoAgentsMap = (queryClient: QueryClient, agent: any) => {
-  const editCacheKey = [QueryKeys.agents, { requiredPermission: PermissionBits.EDIT }];
-  const editCache = queryClient.getQueryData<AgentListResponse>(editCacheKey);
-
-  if (editCache?.data && !editCache.data.some((cachedAgent) => cachedAgent.id === agent.id)) {
-    // Inject agent into EDIT cache so dropdown can display it
-    const updatedCache = {
-      ...editCache,
-      data: [agent, ...editCache.data],
-    };
-    queryClient.setQueryData(editCacheKey, updatedCache);
-    logger.log('agent', 'Injected URL agent into cache:', agent);
-  }
+const injectAgentIntoAgentsMap = (queryClient: QueryClient, agent: Agent) => {
+  upsertAgentListCaches(queryClient, agent);
+  logger.log('agent', 'Injected URL agent into cache:', agent);
 };
 
 /**
@@ -455,11 +446,9 @@ export default function useQueryParams({
     }
   }, [conversation, processSubmission, areSettingsApplied]);
 
-  const { isAuthenticated } = useAuthContext();
-  const agentsMap = useAgentsMap({ isAuthenticated });
   useEffect(() => {
     if (urlAgent) {
       injectAgentIntoAgentsMap(queryClient, urlAgent);
     }
-  }, [urlAgent, queryClient, agentsMap]);
+  }, [urlAgent, queryClient]);
 }

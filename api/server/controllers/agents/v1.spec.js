@@ -53,6 +53,7 @@ jest.mock('~/server/services/PermissionService', () => ({
 
 jest.mock('~/models', () => ({
   getCategoriesWithCounts: jest.fn(),
+  removeAgentFromAllProjects: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock cache for S3 avatar refresh tests
@@ -74,6 +75,7 @@ const {
 const {
   findAccessibleResources,
   findPubliclyAccessibleResources,
+  grantPermission,
 } = require('~/server/services/PermissionService');
 
 const { refreshS3Url } = require('~/server/services/Files/S3/crud');
@@ -208,6 +210,26 @@ describe('Agent Controllers - Mass Assignment Protection', () => {
       const agentInDb = await Agent.findOne({ id: createdAgent.id });
       expect(agentInDb.author.toString()).toBe(mockReq.user.id);
       expect(agentInDb.authorName).toBeUndefined();
+    });
+
+    test('should fail creation if owner permissions cannot be granted', async () => {
+      grantPermission.mockRejectedValueOnce(new Error('acl unavailable'));
+
+      mockReq.body = {
+        provider: 'openai',
+        model: 'gpt-4',
+        name: 'Agent without ACL',
+      };
+
+      await createAgentHandler(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(500);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: 'Failed to grant owner permissions for new agent',
+      });
+
+      const count = await Agent.countDocuments();
+      expect(count).toBe(0);
     });
 
     test('should validate required fields', async () => {

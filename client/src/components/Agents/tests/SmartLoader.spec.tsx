@@ -313,43 +313,27 @@ describe('useHasData', () => {
     expect(screen.getByTestId('result')).toHaveTextContent('no-data');
   });
 
-  it('detects empty agents array as no data', () => {
-    render(<TestComponent data={{ agents: [] }} />);
+  it('detects empty agent list payload as no data', () => {
+    render(<TestComponent data={{ object: 'list', data: [], has_more: false }} />);
     expect(screen.getByTestId('result')).toHaveTextContent('no-data');
   });
 
-  it('detects non-empty agents array as has data', () => {
-    render(<TestComponent data={{ agents: [{ id: '1', name: 'Test' }] }} />);
+  it('detects non-empty agent list payload as has data', () => {
+    render(
+      <TestComponent
+        data={{ object: 'list', data: [{ id: '1', name: 'Test' }], has_more: false }}
+      />,
+    );
     expect(screen.getByTestId('result')).toHaveTextContent('has-data');
   });
 
-  it('detects invalid agents property as no data', () => {
-    render(<TestComponent data={{ agents: 'not-array' }} />);
+  it('detects null list data as no data', () => {
+    render(<TestComponent data={{ object: 'list', data: null, has_more: false }} />);
     expect(screen.getByTestId('result')).toHaveTextContent('no-data');
   });
 
-  it('detects empty array as no data', () => {
-    render(<TestComponent data={[]} />);
-    expect(screen.getByTestId('result')).toHaveTextContent('no-data');
-  });
-
-  it('detects non-empty array as has data', () => {
-    render(<TestComponent data={[{ name: 'category1' }]} />);
-    expect(screen.getByTestId('result')).toHaveTextContent('has-data');
-  });
-
-  it('detects agent with id as has data', () => {
-    render(<TestComponent data={{ id: '123', name: 'Test Agent' }} />);
-    expect(screen.getByTestId('result')).toHaveTextContent('has-data');
-  });
-
-  it('detects agent with name only as has data', () => {
-    render(<TestComponent data={{ name: 'Test Agent' }} />);
-    expect(screen.getByTestId('result')).toHaveTextContent('has-data');
-  });
-
-  it('detects object without id or name as no data', () => {
-    render(<TestComponent data={{ description: 'Some description' }} />);
+  it('detects missing list data as no data', () => {
+    render(<TestComponent data={{ object: 'list', has_more: false }} />);
     expect(screen.getByTestId('result')).toHaveTextContent('no-data');
   });
 

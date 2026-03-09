@@ -18,6 +18,11 @@ jest.mock('~/hooks/useLocalize', () => () => (key: string) => {
   return mockTranslations[key] || key;
 });
 
+jest.mock('~/hooks/Agents/useStartAgentChat', () => ({
+  __esModule: true,
+  default: jest.fn(() => jest.fn()),
+}));
+
 // Mock useAgentCategories hook
 jest.mock('~/hooks', () => ({
   useLocalize: () => (key: string, values?: Record<string, string | number>) => {
@@ -77,7 +82,6 @@ jest.mock('@librechat/client', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react');
   return {
-    ...jest.requireActual('@librechat/client'),
     useToastContext: jest.fn(() => ({
       showToast: jest.fn(),
     })),
@@ -111,8 +115,9 @@ jest.mock('@librechat/client', () => {
     },
     OGDialogContent: ({ children }: any) => <div data-testid="dialog-content">{children}</div>,
     Label: ({ children, className }: any) => <span className={className}>{children}</span>,
+    Skeleton: ({ className }: { className?: string }) => <div className={className} />,
   };
-});
+}, { virtual: true });
 
 // Create wrapper with QueryClient
 const createWrapper = () => {
@@ -152,6 +157,7 @@ describe('AgentCard', () => {
 
   const mockOnSelect = jest.fn();
   const Wrapper = createWrapper();
+  const getCard = () => screen.getByRole('button', { name: /Test Agent agent\./ });
 
   beforeEach(() => {
     mockOnSelect.mockClear();
@@ -221,7 +227,7 @@ describe('AgentCard', () => {
       </Wrapper>,
     );
 
-    const card = screen.getByRole('button');
+    const card = getCard();
     // Card should be clickable - the actual dialog behavior is handled by Radix
     expect(card).toBeInTheDocument();
     expect(() => fireEvent.click(card)).not.toThrow();
@@ -234,7 +240,7 @@ describe('AgentCard', () => {
       </Wrapper>,
     );
 
-    const card = screen.getByRole('button');
+    const card = getCard();
     // Card should respond to keyboard - the actual dialog behavior is handled by Radix
     expect(() => fireEvent.keyDown(card, { key: 'Enter' })).not.toThrow();
   });
@@ -246,7 +252,7 @@ describe('AgentCard', () => {
       </Wrapper>,
     );
 
-    const card = screen.getByRole('button');
+    const card = getCard();
     // Card should respond to keyboard - the actual dialog behavior is handled by Radix
     expect(() => fireEvent.keyDown(card, { key: ' ' })).not.toThrow();
   });
@@ -258,7 +264,7 @@ describe('AgentCard', () => {
       </Wrapper>,
     );
 
-    const card = screen.getByRole('button');
+    const card = getCard();
     fireEvent.keyDown(card, { key: 'Escape' });
 
     expect(mockOnSelect).not.toHaveBeenCalled();
@@ -271,7 +277,7 @@ describe('AgentCard', () => {
       </Wrapper>,
     );
 
-    const card = screen.getByRole('button');
+    const card = getCard();
     expect(card).toHaveClass('custom-class');
   });
 
@@ -315,7 +321,7 @@ describe('AgentCard', () => {
       </Wrapper>,
     );
 
-    const card = screen.getByRole('button');
+    const card = getCard();
     expect(card).toHaveAttribute('tabIndex', '0');
     expect(card).toHaveAttribute(
       'aria-label',
@@ -386,7 +392,7 @@ describe('AgentCard', () => {
       </Wrapper>,
     );
 
-    const card = screen.getByRole('button');
+    const card = getCard();
     // Should not throw when clicking without onSelect
     expect(() => fireEvent.click(card)).not.toThrow();
   });

@@ -40,10 +40,32 @@ jest.mock('~/hooks', () => ({
   })),
 }));
 
-jest.mock('@librechat/client', () => ({
-  ...jest.requireActual('@librechat/client'),
-  useToastContext: jest.fn(),
-}));
+jest.mock('@librechat/client', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react');
+
+  return {
+    OGDialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    OGDialogContent: React.forwardRef<HTMLDivElement, { children: React.ReactNode }>(
+      ({ children }, ref) => <div ref={ref}>{children}</div>,
+    ),
+    Button: ({
+      children,
+      onClick,
+      disabled,
+      ...props
+    }: {
+      children: React.ReactNode;
+      onClick?: () => void;
+      disabled?: boolean;
+    }) => (
+      <button type="button" onClick={onClick} disabled={disabled} {...props}>
+        {children}
+      </button>
+    ),
+    useToastContext: jest.fn(),
+  };
+}, { virtual: true });
 
 jest.mock('~/utils/agents', () => ({
   renderAgentAvatar: jest.fn((agent, options) => (
@@ -53,6 +75,11 @@ jest.mock('~/utils/agents', () => ({
 
 jest.mock('~/Providers', () => ({
   useChatContext: jest.fn(),
+}));
+
+jest.mock('~/hooks/Agents/useStartAgentChat', () => ({
+  __esModule: true,
+  default: jest.fn(() => jest.fn()),
 }));
 
 jest.mock('@tanstack/react-query', () => ({

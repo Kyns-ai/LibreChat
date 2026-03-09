@@ -350,6 +350,168 @@ export const parseCompactConvo = ({
   return convo;
 };
 
+export type TExtractedThinkingSegment = {
+  type: 'text' | 'think';
+  content: string;
+};
+
+const taggedThinkingPatterns = [/:::thinking\s*([\s\S]*?):::/gi, /<think>\s*([\s\S]*?)\s*<\/think>/gi];
+const leadingThinkingPattern =
+  /^(thinking process|thought process|reasoning process|thinking|reasoning):\s*/i;
+const answerHeadingPattern =
+  /(?:^|\n{2,})(final answer|answer|response|result|output|resposta final|resposta|resultado|conclus[aã]o):\s*/i;
+
+const normalizeExtractedContent = (text: string) =>
+  text.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+const splitTaggedThinking = (
+  text: string,
+  pattern: RegExp,
+): Array<TExtractedThinkingSegment> => {
+  const segments: Array<TExtractedThinkingSegment> = [];
+  let lastIndex = 0;
+  pattern.lastIndex = 0;
+
+  let match = pattern.exec(text);
+  while (match != null) {
+    const before = text.slice(lastIndex, match.index);
+    if (before.length > 0) {
+      segments.push({ type: 'text', content: before });
+    }
+
+    const thinkingContent = normalizeExtractedContent(match[1] ?? '');
+    if (thinkingContent.length > 0) {
+      segments.push({ type: 'think', content: thinkingContent });
+    }
+
+    lastIndex = match.index + match[0].length;
+    match = pattern.exec(text);
+  }
+
+  const after = text.slice(lastIndex);
+  if (after.length > 0) {
+    segments.push({ type: 'text', content: after });
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', content: text }];
+};
+
+const splitLeadingThinking = (text: string): Array<TExtractedThinkingSegment> => {
+  const normalizedText = text.replace(/\r\n/g, '\n');
+  const trimmedLeadingText = normalizedText.trimStart();
+  const prefixMatch = trimmedLeadingText.match(leadingThinkingPattern);
+
+  if (!prefixMatch) {
+    return [{ type: 'text', content: normalizedText }];
+  }
+
+  const remainder = trimmedLeadingText.slice(prefixMatch[0].length);
+  const answerMatch = answerHeadingPattern.exec(remainder);
+
+  if (!answerMatch) {
+    return [{ type: 'think', content: normalizeExtractedContent(trimmedLeadingText) }];
+  }
+
+  const reasoningContent = normalizeExtractedContent(remainder.slice(0, answerMatch.index));
+  const visibleContent = normalizeExtractedContent(
+    remainder.slice(answerMatch.index + answerMatch[0].length),
+  );
+  const segments: Array<TExtractedThinkingSegment> = [];
+
+  if (reasoningContent.length > 0) {
+    segments.push({ type: 'think', content: reasoningContent });
+  }
+
+  if (visibleContent.length > 0) {
+    segments.push({ type: 'text', content: visibleContent });
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', content: normalizedText }];
+};
+
+const mergeExtractedSegments = (
+  segments: Array<TExtractedThinkingSegment>,
+): Array<TExtractedThinkingSegment> => {
+  const mergedSegments: Array<TExtractedThinkingSegment> = [];
+
+  for (const segment of segments) {
+    const normalizedContent =
+      segment.type === 'think'
+        ? normalizeExtractedContent(segment.content)
+        : segment.content.replace(/\r\n/g, '\n');
+    if (normalizedContent.trim().length === 0) {
+      continue;
+    }
+
+    const previousSegment = mergedSegments[mergedSegments.length - 1];
+    if (previousSegment?.type === segment.type) {
+      previousSegment.content +=
+        segment.type === 'think' ? `\n\n${normalizedContent}` : normalizedContent;
+      continue;
+    }
+
+    mergedSegments.push({
+      type: segment.type,
+      content: normalizedContent,
+    });
+  }
+
+  return mergedSegments;
+};
+
+export function extractThinkingContent(text: string): {
+  thinkingContent: string;
+  regularContent: string;
+  segments: Array<TExtractedThinkingSegment>;
+} {
+  if (!text) {
+    return {
+      thinkingContent: '',
+      regularContent: '',
+      segments: [],
+    };
+  }
+
+  let segments: Array<TExtractedThinkingSegment> = [{ type: 'text', content: text }];
+
+  for (const pattern of taggedThinkingPatterns) {
+    segments = segments.flatMap((segment) => {
+      if (segment.type === 'think') {
+        return [segment];
+      }
+
+      return splitTaggedThinking(segment.content, pattern);
+    });
+  }
+
+  segments = segments.flatMap((segment) => {
+    if (segment.type === 'think') {
+      return [segment];
+    }
+
+    return splitLeadingThinking(segment.content);
+  });
+
+  const extractedSegments = mergeExtractedSegments(segments);
+  const thinkingContent = extractedSegments
+    .filter((segment) => segment.type === 'think')
+    .map((segment) => segment.content)
+    .join('\n\n')
+    .trim();
+  const regularContent = normalizeExtractedContent(
+    extractedSegments
+      .filter((segment) => segment.type === 'text')
+      .map((segment) => segment.content)
+      .join(''),
+  );
+
+  return {
+    thinkingContent,
+    regularContent,
+    segments: extractedSegments,
+  };
+}
+
 export function parseTextParts(
   contentParts: Array<a.TMessageContentParts | undefined>,
   skipReasoning: boolean = false,
@@ -362,16 +524,23 @@ export function parseTextParts(
     }
     if (part.type === ContentTypes.TEXT) {
       const textValue = (typeof part.text === 'string' ? part.text : part.text?.value) || '';
+      const extracted = extractThinkingContent(textValue);
+      const segments = skipReasoning
+        ? extracted.segments.filter((segment) => segment.type !== 'think')
+        : extracted.segments;
 
-      if (
-        result.length > 0 &&
-        textValue.length > 0 &&
-        result[result.length - 1] !== ' ' &&
-        textValue[0] !== ' '
-      ) {
-        result += ' ';
+      for (const segment of segments) {
+        const segmentText = segment.content;
+        if (
+          result.length > 0 &&
+          segmentText.length > 0 &&
+          result[result.length - 1] !== ' ' &&
+          segmentText[0] !== ' '
+        ) {
+          result += ' ';
+        }
+        result += segmentText;
       }
-      result += textValue;
     } else if (part.type === ContentTypes.THINK && !skipReasoning) {
       const textValue = typeof part.think === 'string' ? part.think : '';
       if (

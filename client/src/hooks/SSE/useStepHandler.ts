@@ -66,6 +66,33 @@ export default function useStepHandler({
   /** Buffer for deltas that arrive before their corresponding run step */
   const pendingDeltaBuffer = useRef(new Map<string, TStepEvent[]>());
 
+  const mergeStreamDelta = useCallback((currentValue = '', incomingValue = '') => {
+    if (!incomingValue) {
+      return currentValue;
+    }
+
+    if (!currentValue) {
+      return incomingValue;
+    }
+
+    if (incomingValue === currentValue || currentValue.endsWith(incomingValue)) {
+      return currentValue;
+    }
+
+    if (incomingValue.startsWith(currentValue)) {
+      return incomingValue;
+    }
+
+    const maxOverlap = Math.min(currentValue.length, incomingValue.length);
+    for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+      if (currentValue.slice(-overlap) === incomingValue.slice(0, overlap)) {
+        return currentValue + incomingValue.slice(overlap);
+      }
+    }
+
+    return currentValue + incomingValue;
+  }, []);
+
   /**
    * Calculate content index for a run step.
    * For edited content scenarios, offset by initialContent length.
@@ -135,7 +162,7 @@ export default function useStepHandler({
       const currentContent = updatedContent[index] as MessageDeltaUpdate;
       const update: MessageDeltaUpdate = {
         type: ContentTypes.TEXT,
-        text: (currentContent.text || '') + contentPart.text,
+        text: mergeStreamDelta(currentContent.text, contentPart.text),
       };
 
       if (contentPart.tool_call_ids != null) {
@@ -161,7 +188,7 @@ export default function useStepHandler({
       const currentContent = updatedContent[index] as ReasoningDeltaUpdate;
       const update: ReasoningDeltaUpdate = {
         type: ContentTypes.THINK,
-        think: (currentContent.think || '') + contentPart.think,
+        think: mergeStreamDelta(currentContent.think, contentPart.think),
       };
 
       updatedContent[index] = update;
@@ -177,13 +204,23 @@ export default function useStepHandler({
       const existingContent = updatedContent[index] as Agents.ToolCallContent | undefined;
       const existingToolCall = existingContent?.tool_call;
       const toolCallArgs = (contentPart.tool_call as Agents.ToolCall).args;
+      const existingArgs = typeof existingToolCall?.args === 'string' ? existingToolCall.args : '';
+      const incomingArgs = typeof toolCallArgs === 'string' ? toolCallArgs : '';
+      const shouldReplacePlaceholderArgs =
+        (existingArgs.trim() === '{}' || existingArgs.trim() === '[]') &&
+        incomingArgs.trim().length > existingArgs.trim().length;
       /** When args are a valid object, they are likely already invoked */
       let args =
         finalUpdate ||
         typeof existingToolCall?.args === 'object' ||
         typeof toolCallArgs === 'object'
           ? contentPart.tool_call.args
-          : (existingToolCall?.args ?? '') + (toolCallArgs ?? '');
+          : shouldReplacePlaceholderArgs
+            ? incomingArgs
+          : mergeStreamDelta(
+              existingArgs,
+              incomingArgs,
+            );
       /** Preserve previously streamed args when final update omits them */
       if (finalUpdate && args == null && existingToolCall?.args != null) {
         args = existingToolCall.args;

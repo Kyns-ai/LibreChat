@@ -618,7 +618,7 @@ class GenerationJobManagerClass {
     const collectedUsage = this.jobStore.getCollectedUsage(streamId);
 
     /** Text from content parts for fallback token counting */
-    const text = parseTextParts(content as TMessageContentParts[]);
+    const text = parseTextParts(content as TMessageContentParts[], true);
 
     /** Detect "early abort" - aborted before any generation happened (e.g., during tool loading)
     In this case, no messages were saved to DB, so frontend shouldn't navigate to conversation */

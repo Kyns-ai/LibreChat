@@ -2256,5 +2256,18 @@ describe('AgentClient - titleConvo', () => {
         expect.any(Object),
       );
     });
+
+    it('should stop waiting for slow memory context after timeout', async () => {
+      jest.useFakeTimers();
+
+      client = new AgentClient(mockOptions);
+      const pendingMemoryContext = new Promise(() => {});
+      const resultPromise = client.awaitMemoryContextWithTimeout(pendingMemoryContext, 25);
+
+      await jest.advanceTimersByTimeAsync(25);
+
+      await expect(resultPromise).resolves.toBeUndefined();
+      jest.useRealTimers();
+    });
   });
 });

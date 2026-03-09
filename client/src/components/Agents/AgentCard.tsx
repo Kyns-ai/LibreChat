@@ -1,17 +1,8 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 import { Label, OGDialog, OGDialogTrigger } from '@librechat/client';
-import {
-  QueryKeys,
-  Constants,
-  EModelEndpoint,
-  PermissionBits,
-  LocalStorageKeys,
-  AgentListResponse,
-} from 'librechat-data-provider';
 import type t from 'librechat-data-provider';
 import { useLocalize, TranslationKeys, useAgentCategories } from '~/hooks';
+import useStartAgentChat from '~/hooks/Agents/useStartAgentChat';
 import { cn, renderAgentAvatar, getContactDisplayName } from '~/utils';
 import AgentDetailContent from './AgentDetailContent';
 import { Info } from 'lucide-react';
@@ -28,9 +19,8 @@ interface AgentCardProps {
  */
 const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, className = '' }) => {
   const localize = useLocalize();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { categories } = useAgentCategories();
+  const startAgentChat = useStartAgentChat();
   const [isOpen, setIsOpen] = useState(false);
 
   const categoryLabel = useMemo(() => {
@@ -54,26 +44,13 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, className = '' }
       return;
     }
 
-    const keys = [QueryKeys.agents, { requiredPermission: PermissionBits.EDIT }];
-    const listResp = queryClient.getQueryData<AgentListResponse>(keys);
-    if (listResp != null && !listResp.data.some((a) => a.id === agent.id)) {
-      const currentAgents = [agent, ...JSON.parse(JSON.stringify(listResp.data))];
-      queryClient.setQueryData<AgentListResponse>(keys, { ...listResp, data: currentAgents });
+    if (onSelect) {
+      onSelect(agent);
+      return;
     }
 
-    localStorage.setItem(`${LocalStorageKeys.AGENT_ID_PREFIX}0`, agent.id);
-    localStorage.setItem(
-      `${LocalStorageKeys.LAST_CONVO_SETUP}_0`,
-      JSON.stringify({
-        endpoint: EModelEndpoint.agents,
-        agent_id: agent.id,
-        conversationId: Constants.NEW_CONVO,
-      }),
-    );
-
-    queryClient.invalidateQueries([QueryKeys.messages]);
-    navigate(`/c/${Constants.NEW_CONVO}`, { state: { focusChat: true, agentId: agent.id } });
-  }, [agent, queryClient, navigate]);
+    startAgentChat(agent);
+  }, [agent, onSelect, startAgentChat]);
 
   const handleInfoClick = useCallback(
     (e: React.MouseEvent) => {

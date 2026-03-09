@@ -1,8 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError } from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 import * as endpoints from './api-endpoints';
 import { setTokenHeader } from './headers-helpers';
 import type * as t from './types';
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+const TTS_REQUEST_TIMEOUT_MS = 60000;
+
+axios.defaults.timeout = DEFAULT_REQUEST_TIMEOUT_MS;
 
 async function _get<T>(url: string, options?: AxiosRequestConfig): Promise<T> {
   const response = await axios.get(url, { ...options });
@@ -31,6 +37,7 @@ async function _postMultiPart(url: string, formData: FormData, options?: AxiosRe
 async function _postTTS(url: string, formData: FormData, options?: AxiosRequestConfig) {
   const response = await axios.post(url, formData, {
     ...options,
+    timeout: options?.timeout ?? TTS_REQUEST_TIMEOUT_MS,
     headers: { 'Content-Type': 'multipart/form-data' },
     responseType: 'arraybuffer',
   });

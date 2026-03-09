@@ -1,4 +1,10 @@
-import { replaceSpecialVars, parseConvo, parseCompactConvo, parseTextParts } from '../src/parsers';
+import {
+  replaceSpecialVars,
+  parseConvo,
+  parseCompactConvo,
+  parseTextParts,
+  extractThinkingContent,
+} from '../src/parsers';
 import { specialVariables } from '../src/config';
 import { EModelEndpoint } from '../src/schemas';
 import { ContentTypes } from '../src/types/runs';
@@ -527,6 +533,42 @@ describe('parseTextParts', () => {
       { type: ContentTypes.TEXT, text: { value: 'structured text' } },
     ];
     expect(parseTextParts(parts)).toBe('structured text');
+  });
+
+  test('should extract :::thinking blocks from text parts', () => {
+    const extracted = extractThinkingContent(':::thinking\nstep 1\n:::\nVisible answer');
+
+    expect(extracted.thinkingContent).toBe('step 1');
+    expect(extracted.regularContent).toBe('Visible answer');
+    expect(extracted.segments).toEqual([
+      { type: 'think', content: 'step 1' },
+      { type: 'text', content: '\nVisible answer' },
+    ]);
+  });
+
+  test('should extract think tags and skip them when requested', () => {
+    const parts: TMessageContentParts[] = [
+      { type: ContentTypes.TEXT, text: 'Answer <think>private chain</think>done' },
+    ];
+
+    expect(parseTextParts(parts)).toBe('Answer private chain done');
+    expect(parseTextParts(parts, true)).toBe('Answer done');
+  });
+
+  test('should treat leading thinking process sections as reasoning only', () => {
+    const extracted = extractThinkingContent('Thinking Process:\n\n1. Analyze\n2. Decide');
+
+    expect(extracted.thinkingContent).toBe('Thinking Process:\n\n1. Analyze\n2. Decide');
+    expect(extracted.regularContent).toBe('');
+  });
+
+  test('should keep final answer after a thinking process heading', () => {
+    const extracted = extractThinkingContent(
+      'Thinking Process:\n\n1. Analyze\n2. Decide\n\nFinal Answer: 437',
+    );
+
+    expect(extracted.thinkingContent).toBe('1. Analyze\n2. Decide');
+    expect(extracted.regularContent).toBe('437');
   });
 
   test('should include think parts by default', () => {

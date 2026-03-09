@@ -6,6 +6,14 @@ import AgentGrid from '../AgentGrid';
 import type t from 'librechat-data-provider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+jest.mock('@librechat/client', () => ({
+  Spinner: ({ className }: { className?: string }) => (
+    <div data-testid="spinner" className={className}>
+      Loading
+    </div>
+  ),
+}), { virtual: true });
+
 // Mock the marketplace agent query hook
 jest.mock('~/data-provider/Agents', () => ({
   useMarketplaceAgentsInfiniteQuery: jest.fn(),

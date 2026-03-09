@@ -1,19 +1,10 @@
 import React from 'react';
 import { Link, Pin, PinOff } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import { OGDialogContent, Button, useToastContext } from '@librechat/client';
-import {
-  QueryKeys,
-  Constants,
-  EModelEndpoint,
-  PermissionBits,
-  LocalStorageKeys,
-  AgentListResponse,
-} from 'librechat-data-provider';
 import type t from 'librechat-data-provider';
-import { useLocalize, useDefaultConvo, useFavorites } from '~/hooks';
-import { renderAgentAvatar, clearMessagesCache } from '~/utils';
-import { useChatContext } from '~/Providers';
+import { useFavorites, useLocalize } from '~/hooks';
+import useStartAgentChat from '~/hooks/Agents/useStartAgentChat';
+import { renderAgentAvatar } from '~/utils';
 
 interface SupportContact {
   name?: string;
@@ -35,11 +26,9 @@ interface AgentDetailContentProps {
  */
 const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent, hideStartChat = false }) => {
   const localize = useLocalize();
-  const queryClient = useQueryClient();
   const { showToast } = useToastContext();
-  const getDefaultConversation = useDefaultConvo();
-  const { conversation, newConversation } = useChatContext();
   const { isFavoriteAgent, toggleFavoriteAgent } = useFavorites();
+  const startAgentChat = useStartAgentChat();
   const isFavorite = isFavoriteAgent(agent?.id);
 
   const handleFavoriteClick = () => {
@@ -53,37 +42,7 @@ const AgentDetailContent: React.FC<AgentDetailContentProps> = ({ agent, hideStar
    */
   const handleStartChat = () => {
     if (agent) {
-      const keys = [QueryKeys.agents, { requiredPermission: PermissionBits.EDIT }];
-      const listResp = queryClient.getQueryData<AgentListResponse>(keys);
-      if (listResp != null) {
-        if (!listResp.data.some((a) => a.id === agent.id)) {
-          const currentAgents = [agent, ...JSON.parse(JSON.stringify(listResp.data))];
-          queryClient.setQueryData<AgentListResponse>(keys, { ...listResp, data: currentAgents });
-        }
-      }
-
-      localStorage.setItem(`${LocalStorageKeys.AGENT_ID_PREFIX}0`, agent.id);
-
-      clearMessagesCache(queryClient, conversation?.conversationId);
-      queryClient.invalidateQueries([QueryKeys.messages]);
-
-      /** Template with agent configuration */
-      const template = {
-        conversationId: Constants.NEW_CONVO as string,
-        endpoint: EModelEndpoint.agents,
-        agent_id: agent.id,
-        title: localize('com_agents_chat_with', { name: agent.name || localize('com_ui_agent') }),
-      };
-
-      const currentConvo = getDefaultConversation({
-        conversation: { ...(conversation ?? {}), ...template },
-        preset: template,
-      });
-
-      newConversation({
-        template: currentConvo,
-        preset: template,
-      });
+      startAgentChat(agent);
     }
   };
 

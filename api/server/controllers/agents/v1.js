@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const fs = require('fs').promises;
+const mongoose = require('mongoose');
 const { nanoid } = require('nanoid');
 const { logger } = require('@librechat/data-schemas');
 const {
@@ -121,6 +122,22 @@ const createAgentHandler = async (req, res) => {
         `[createAgent] Failed to grant owner permissions for agent ${agent.id}:`,
         permissionError,
       );
+      try {
+        if (agent?._id && mongoose.models.Agent?.collection?.deleteOne) {
+          await mongoose.models.Agent.collection.deleteOne({ _id: agent._id });
+        } else {
+          await deleteAgent({ id: agent.id });
+        }
+      } catch (cleanupError) {
+        logger.error(
+          `[createAgent] Failed to clean up agent ${agent.id} after permission grant failure:`,
+          cleanupError,
+        );
+      }
+
+      return res.status(500).json({
+        error: 'Failed to grant owner permissions for new agent',
+      });
     }
 
     res.status(201).json(agent);

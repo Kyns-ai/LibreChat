@@ -1,6 +1,7 @@
 import { memo, Suspense, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import { DelayedRender } from '@librechat/client';
+import { extractThinkingContent } from 'librechat-data-provider';
 import type { TMessage } from 'librechat-data-provider';
 import type { TMessageContentProps, TDisplayProps } from '~/common';
 import Error from '~/components/Messages/Content/Error';
@@ -17,14 +18,6 @@ import store from '~/store';
 const ERROR_CONNECTION_TEXT = 'Error connecting to server, try refreshing the page.';
 const DELAYED_ERROR_TIMEOUT = 5500;
 const UNFINISHED_DELAY = 250;
-
-const parseThinkingContent = (text: string) => {
-  const thinkingMatch = text.match(/:::thinking([\s\S]*?):::/);
-  return {
-    thinkingContent: thinkingMatch ? thinkingMatch[1].trim() : '',
-    regularContent: thinkingMatch ? text.replace(/:::thinking[\s\S]*?:::/, '').trim() : text,
-  };
-};
 
 const LoadingFallback = () => (
   <div className="text-message mb-[0.625rem] flex min-h-[20px] flex-col items-start gap-3 overflow-visible">
@@ -146,8 +139,13 @@ const MessageContent = ({
   const { message } = props;
   const { messageId } = message;
 
-  const { thinkingContent, regularContent } = useMemo(() => parseThinkingContent(text), [text]);
+  const { regularContent, segments } = useMemo(() => extractThinkingContent(text), [text]);
+  const thinkingSegments = useMemo(
+    () => segments.filter((segment) => segment.type === 'think'),
+    [segments],
+  );
   const showRegularCursor = useMemo(() => isLast && isSubmitting, [isLast, isSubmitting]);
+  const shouldRenderRegularContent = regularContent.length > 0 || thinkingSegments.length === 0;
 
   const unfinishedMessage = useMemo(
     () =>
@@ -171,15 +169,17 @@ const MessageContent = ({
 
   return (
     <>
-      {thinkingContent.length > 0 && (
-        <Thinking key={`thinking-${messageId}`}>{thinkingContent}</Thinking>
+      {thinkingSegments.map((segment, index) => (
+        <Thinking key={`thinking-${messageId}-${index}`}>{segment.content}</Thinking>
+      ))}
+      {shouldRenderRegularContent && (
+        <DisplayMessage
+          key={`display-${messageId}`}
+          showCursor={showRegularCursor}
+          text={regularContent}
+          {...props}
+        />
       )}
-      <DisplayMessage
-        key={`display-${messageId}`}
-        showCursor={showRegularCursor}
-        text={regularContent}
-        {...props}
-      />
       {unfinishedMessage}
     </>
   );

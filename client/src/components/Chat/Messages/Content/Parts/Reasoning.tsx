@@ -1,10 +1,12 @@
-import { memo, useMemo, useState, useCallback, useRef, useId } from 'react';
+import { memo, useMemo, useState, useCallback, useRef, useId, useEffect } from 'react';
+import { useAtomValue } from 'jotai';
 import { Lightbulb } from 'lucide-react';
 import type { MouseEvent, FocusEvent } from 'react';
 import { ContentTypes } from 'librechat-data-provider';
 import { ThinkingContent, ThinkingButton, FloatingThinkingBar } from './Thinking';
 import { useMessageContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
+import { showThinkingAtom } from '~/store/showThinking';
 import { cn } from '~/utils';
 
 type ReasoningProps = {
@@ -37,11 +39,15 @@ type ReasoningProps = {
 const Reasoning = memo(({ reasoning, isLast }: ReasoningProps) => {
   const contentId = useId();
   const localize = useLocalize();
-  const showThinking = false;
+  const showThinking = useAtomValue(showThinkingAtom);
   const [isExpanded, setIsExpanded] = useState(showThinking);
   const [isBarVisible, setIsBarVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { isSubmitting, isLatestMessage, nextType } = useMessageContext();
+
+  useEffect(() => {
+    setIsExpanded(showThinking);
+  }, [showThinking]);
 
   const reasoningText = useMemo(() => {
     return reasoning
