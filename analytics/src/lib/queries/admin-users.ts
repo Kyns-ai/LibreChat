@@ -25,6 +25,10 @@ export interface UserListResult {
   pages: number
 }
 
+function toObjectId(id: string): ObjectId | string {
+  try { return new ObjectId(id) } catch { return id }
+}
+
 export async function getUserList(opts: {
   search?: string
   status?: string
@@ -35,6 +39,7 @@ export async function getUserList(opts: {
 }): Promise<UserListResult> {
   const users = await getCollection('users')
   const messages = await getCollection('messages')
+  const conversations = await getCollection('conversations')
 
   const page = opts.page ?? 1
   const limit = Math.min(opts.limit ?? 50, 200)
@@ -66,16 +71,24 @@ export async function getUserList(opts: {
 
   const userIds = docs.map((d) => String(d._id))
 
-  const msgAgg = await messages.aggregate([
-    { $match: { user: { $in: userIds }, isCreatedByUser: true } },
-    { $group: { _id: '$user', count: { $sum: 1 }, lastMsg: { $max: '$createdAt' }, modes: { $push: '$endpoint' } } },
-  ]).toArray()
+  const [msgAgg, convoAgg] = await Promise.all([
+    messages.aggregate([
+      { $match: { user: { $in: userIds }, isCreatedByUser: true } },
+      { $group: { _id: '$user', count: { $sum: 1 }, lastMsg: { $max: '$createdAt' }, modes: { $push: '$endpoint' } } },
+    ]).toArray(),
+    conversations.aggregate([
+      { $match: { user: { $in: userIds } } },
+      { $group: { _id: '$user', count: { $sum: 1 } } },
+    ]).toArray(),
+  ])
 
   const msgMap = new Map(msgAgg.map((a) => [String(a._id), a]))
+  const convoMap = new Map(convoAgg.map((a) => [String(a._id), a.count as number]))
 
   return {
     users: docs.map((d) => {
-      const stats = msgMap.get(String(d._id))
+      const uid = String(d._id)
+      const stats = msgMap.get(uid)
       const modes = (stats?.modes ?? []) as string[]
       const modeCount: Record<string, number> = {}
       for (const m of modes) modeCount[m] = (modeCount[m] ?? 0) + 1
@@ -86,11 +99,11 @@ export async function getUserList(opts: {
       const status: AdminUser['status'] = banned
         ? 'banned'
         : lastActive && lastActive > thirtyDaysAgo
-        ? 'active'
-        : 'inactive'
+          ? 'active'
+          : 'inactive'
 
       return {
-        _id: String(d._id),
+        _id: uid,
         name: String((d as Record<string, unknown>).name ?? ''),
         email: String((d as Record<string, unknown>).email ?? ''),
         provider: String((d as Record<string, unknown>).provider ?? 'local'),
@@ -98,7 +111,7 @@ export async function getUserList(opts: {
         updatedAt: (d as Record<string, unknown>).updatedAt as Date,
         lastActive,
         totalMessages: stats?.count ?? 0,
-        totalConversations: 0,
+        totalConversations: convoMap.get(uid) ?? 0,
         favoriteMode,
         status,
         role: String((d as Record<string, unknown>).role ?? 'user'),
@@ -114,19 +127,16 @@ export async function getUserList(opts: {
 
 export async function getUserById(id: string): Promise<AdminUser | null> {
   const users = await getCollection('users')
-  let query: Record<string, unknown>
-  try {
-    query = { _id: new ObjectId(id) }
-  } catch {
-    query = { _id: id }
-  }
-  const d = await users.findOne(query)
+  const d = await users.findOne({ _id: toObjectId(id) as ObjectId })
   if (!d) return null
 
   const messages = await getCollection('messages')
+  const conversations = await getCollection('conversations')
   const userId = String(d._id)
-  const [msgCount, lastMsg] = await Promise.all([
+
+  const [msgCount, convoCount, lastMsg] = await Promise.all([
     messages.countDocuments({ user: userId, isCreatedByUser: true }),
+    conversations.countDocuments({ user: userId }),
     messages.find({ user: userId }).sort({ createdAt: -1 }).limit(1).toArray(),
   ])
 
@@ -144,7 +154,7 @@ export async function getUserById(id: string): Promise<AdminUser | null> {
     updatedAt: (d as Record<string, unknown>).updatedAt as Date,
     lastActive,
     totalMessages: msgCount,
-    totalConversations: 0,
+    totalConversations: convoCount,
     favoriteMode: '—',
     status,
     role: String((d as Record<string, unknown>).role ?? 'user'),
@@ -156,18 +166,22 @@ export async function getUserById(id: string): Promise<AdminUser | null> {
 export async function getUserRecentConversations(userId: string) {
   const conversations = await getCollection('conversations')
   const messages = await getCollection('messages')
-  const convs = await conversations.find({ user: userId }).sort({ createdAt: -1 }).limit(20).toArray()
+
+  // LibreChat stores conversations with _id as the ObjectId and conversationId as a separate string field
+  const convs = await conversations.find({ user: userId }).sort({ updatedAt: -1 }).limit(20).toArray()
 
   return Promise.all(convs.map(async (c) => {
-    const convId = String((c as Record<string, unknown>).conversationId ?? '')
-    const msgCount = await messages.countDocuments({ conversationId: convId })
+    const doc = c as Record<string, unknown>
+    // conversationId is a dedicated string field in LibreChat conversations
+    const convId = String(doc.conversationId ?? doc._id ?? '')
+    const msgCount = convId ? await messages.countDocuments({ conversationId: convId }) : 0
     return {
       conversationId: convId,
-      endpoint: (c as Record<string, unknown>).endpoint ?? '—',
-      model: (c as Record<string, unknown>).model ?? '',
-      agentId: (c as Record<string, unknown>).agent_id ?? null,
-      title: (c as Record<string, unknown>).title ?? 'Sem título',
-      createdAt: (c as Record<string, unknown>).createdAt,
+      endpoint: doc.endpoint ?? '—',
+      model: doc.model ?? '',
+      agentId: doc.agent_id ?? null,
+      title: doc.title ?? 'Sem título',
+      createdAt: doc.createdAt,
       messageCount: msgCount,
     }
   }))
@@ -175,29 +189,21 @@ export async function getUserRecentConversations(userId: string) {
 
 export async function updateUser(id: string, updates: Record<string, unknown>) {
   const users = await getCollection('users')
-  let query: Record<string, unknown>
-  try {
-    query = { _id: new ObjectId(id) }
-  } catch {
-    query = { _id: id }
-  }
-  return users.updateOne(query, { $set: { ...updates, updatedAt: new Date() } })
+  return users.updateOne(
+    { _id: toObjectId(id) as ObjectId },
+    { $set: { ...updates, updatedAt: new Date() } }
+  )
 }
 
 export async function deleteUser(id: string) {
   const users = await getCollection('users')
-  let query: Record<string, unknown>
-  try {
-    query = { _id: new ObjectId(id) }
-  } catch {
-    query = { _id: id }
-  }
-  return users.deleteOne(query)
+  return users.deleteOne({ _id: toObjectId(id) as ObjectId })
 }
 
 export async function getSuspiciousUsers() {
   const messages = await getCollection('messages')
   const oneHourAgo = new Date(Date.now() - 3600_000)
+
   const agg = await messages.aggregate([
     { $match: { createdAt: { $gte: oneHourAgo }, isCreatedByUser: true } },
     { $group: { _id: '$user', count: { $sum: 1 } } },
@@ -209,14 +215,23 @@ export async function getSuspiciousUsers() {
   if (!agg.length) return []
 
   const users = await getCollection('users')
-  const ids = agg.map((a) => String(a._id))
-  const userDocs = await users.find({ _id: { $in: ids } } as Record<string, unknown>).toArray()
+  // user field in messages is a string representation of ObjectId
+  // need to convert to ObjectId for lookup
+  const objectIds = agg.map((a) => {
+    try { return new ObjectId(String(a._id)) } catch { return null }
+  }).filter(Boolean) as ObjectId[]
+
+  const userDocs = await users.find({ _id: { $in: objectIds } }).toArray()
   const userMap = new Map(userDocs.map((u) => [String(u._id), u]))
 
-  return agg.map((a) => ({
-    userId: String(a._id),
-    msgsLastHour: a.count as number,
-    email: String((userMap.get(String(a._id)) as Record<string, unknown> | undefined)?.email ?? '—'),
-    name: String((userMap.get(String(a._id)) as Record<string, unknown> | undefined)?.name ?? '—'),
-  }))
+  return agg.map((a) => {
+    const uid = String(a._id)
+    const userDoc = userMap.get(uid) as Record<string, unknown> | undefined
+    return {
+      userId: uid,
+      msgsLastHour: a.count as number,
+      email: String(userDoc?.email ?? '—'),
+      name: String(userDoc?.name ?? '—'),
+    }
+  })
 }

@@ -1,3 +1,4 @@
+import { ObjectId } from 'mongodb'
 import { getCollection } from '../mongodb'
 
 export interface ErrorLog {
@@ -49,17 +50,20 @@ export async function getErrorLogs(opts: {
   const page = opts.page ?? 1
   const skip = (page - 1) * limit
 
+  const errorTypes: string[] = opts.type ? [opts.type] : ['error', 'thinking_leak', 'looping', 'timeout']
+
   const match: Record<string, unknown> = { isCreatedByUser: false }
   if (opts.userId) match['user'] = opts.userId
   if (opts.conversationId) match['conversationId'] = opts.conversationId
 
-  const errorTypes: string[] = opts.type ? [opts.type] : ['error', 'thinking_leak', 'looping', 'timeout']
-
-  if (errorTypes.includes('error') && errorTypes.length === 1) {
+  // For pure "error" type, we can filter directly in MongoDB
+  if (errorTypes.length === 1 && errorTypes[0] === 'error') {
     match['error'] = true
   }
 
-  const docs = await messages.find(match).sort({ createdAt: -1 }).limit(500).toArray()
+  // Fetch a reasonable window for analysis
+  const fetchLimit = Math.min((page + 4) * limit * 4, 2000)
+  const docs = await messages.find(match).sort({ createdAt: -1 }).limit(fetchLimit).toArray()
 
   const logs: ErrorLog[] = []
   for (const d of docs) {
@@ -86,10 +90,9 @@ export async function getErrorLogs(opts: {
         model: String(doc.model ?? ''),
         endpoint: String(doc.endpoint ?? ''),
         snippet: text.substring(0, 200),
-        createdAt: doc.createdAt as Date ?? new Date(),
+        createdAt: (doc.createdAt as Date) ?? new Date(),
       })
     }
-    if (logs.length >= 500) break
   }
 
   const total = logs.length
@@ -127,14 +130,13 @@ export async function getModerationFeed(opts: {
       userId: String(doc.userId ?? ''),
       endpoint: String(doc.endpoint ?? ''),
       agentId: doc.agentId ? String(doc.agentId) : null,
-      createdAt: doc.createdAt as Date ?? new Date(),
+      createdAt: (doc.createdAt as Date) ?? new Date(),
       messageCount: Number(doc.messageCount ?? 0),
       flagReason: String(doc.flagReason ?? ''),
       status: (doc.status as ModerationItem['status']) ?? 'pending',
     }
   })
 
-  // Auto-flag new conversations with keywords
   if (opts.keywords?.length) {
     const keywordRegex = new RegExp(opts.keywords.join('|'), 'i')
     const recentMsgs = await messages.find({
@@ -173,15 +175,16 @@ export async function getModerationFeed(opts: {
 
 export async function updateModerationItem(id: string, status: string) {
   const flagCol = await getCollection('kyns_moderation_flags')
-  const { ObjectId } = await import('mongodb')
+  let oid: ObjectId | string
   try {
-    await flagCol.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { status, reviewedAt: new Date() } }
-    )
+    oid = new ObjectId(id)
   } catch {
-    await flagCol.updateOne({ _id: id as unknown as import('mongodb').ObjectId }, { $set: { status, reviewedAt: new Date() } })
+    oid = id
   }
+  await flagCol.updateOne(
+    { _id: oid as ObjectId },
+    { $set: { status, reviewedAt: new Date() } }
+  )
 }
 
 export async function flagConversation(conversationId: string, reason: string, userId: string) {

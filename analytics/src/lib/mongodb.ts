@@ -4,26 +4,45 @@ declare global {
   var _mongoClient: MongoClient | undefined
 }
 
-let client: MongoClient
 let db: Db
 
-export async function getDb(): Promise<Db> {
-  if (db) return db
-
+async function createClient(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI
   if (!uri) throw new Error('MONGODB_URI not set')
+  const c = new MongoClient(uri, {
+    maxPoolSize: 10,
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+  })
+  await c.connect()
+  return c
+}
 
-  if (!global._mongoClient) {
-    global._mongoClient = new MongoClient(uri, {
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000,
-    })
-    await global._mongoClient.connect()
+function isClientAlive(c: MongoClient): boolean {
+  try {
+    const topology = (c as unknown as { topology?: { isConnected?: () => boolean } }).topology
+    return topology?.isConnected?.() ?? true
+  } catch {
+    return false
+  }
+}
+
+export async function getDb(): Promise<Db> {
+  if (db && global._mongoClient && isClientAlive(global._mongoClient)) {
+    return db
   }
 
-  client = global._mongoClient
-  db = client.db(process.env.MONGODB_DB_NAME ?? 'LibreChat')
+  if (global._mongoClient && !isClientAlive(global._mongoClient)) {
+    try { await global._mongoClient.close() } catch { /* already closed */ }
+    global._mongoClient = undefined
+    db = undefined as unknown as Db
+  }
+
+  if (!global._mongoClient) {
+    global._mongoClient = await createClient()
+  }
+
+  db = global._mongoClient.db(process.env.MONGODB_DB_NAME ?? 'LibreChat')
   return db
 }
 
@@ -45,7 +64,7 @@ export async function ensureIndexes(): Promise<void> {
     database.collection('kyns_analytics_cache').createIndex({ key: 1 }, { unique: true }),
     database.collection('kyns_analytics_cache').createIndex(
       { updatedAt: 1 },
-      { expireAfterSeconds: 3600 }
+      { expireAfterSeconds: 300 }
     ),
   ])
 }
