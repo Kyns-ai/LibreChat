@@ -118,7 +118,7 @@ function avatarColorForName(name) {
   return colors[Math.abs(h) % colors.length];
 }
 
-/** Generates a stable inline SVG data URI avatar (circle + initial letter). Stored directly in MongoDB — never lost on redeploy. */
+/** Generates a stable inline SVG avatar (circle + initial). Deterministic from name. */
 function generateSvgDataUri(name) {
   const color = avatarColorForName(name);
   const initial = (name || '?')[0].toUpperCase();
@@ -127,9 +127,15 @@ function generateSvgDataUri(name) {
 }
 
 /**
- * For each agent whose local avatar file is missing from disk, updates MongoDB
- * to store a self-contained SVG data URI instead. The data URI lives in the DB
- * (persistent Railway volume) and can never disappear due to container rebuilds.
+ * Ensures all agent avatars stored as local file paths have a persistent
+ * data-URI fallback in MongoDB. On each startup:
+ * - Agents already using a data URI or external URL → skipped
+ * - Agents with a local /images/ path where the file EXISTS → skipped (real photo present)
+ * - Agents with a local /images/ path where the file is MISSING → MongoDB updated
+ *   with a deterministic SVG data URI so the avatar is never blank again
+ *
+ * Because data URIs live in MongoDB (its own persistent Railway volume), they
+ * survive container rebuilds and images-volume resets indefinitely.
  */
 async function fixMissingAgentAvatars() {
   try {
@@ -148,10 +154,9 @@ async function fixMissingAgentAvatars() {
       const av = agent.avatar;
       if (!av || !av.filepath) continue;
 
-      // Already a data URI or external URL — nothing to do
+      // Already a data URI or external URL — persistent by nature
       if (av.filepath.startsWith('data:') || av.filepath.startsWith('http')) continue;
 
-      // Local file path: check whether the file actually exists on disk
       if (av.source === 'local' && av.filepath.startsWith('/images/')) {
         const relPath = av.filepath.split('?')[0].slice('/images/'.length);
         const absPath = path.join(imagesBase, relPath);
@@ -173,10 +178,56 @@ async function fixMissingAgentAvatars() {
     }
 
     if (fixed > 0) {
-      logger.info(`[AvatarFix] ${fixed} agent avatar(s) updated to persistent data URIs`);
+      logger.info(`[AvatarFix] ${fixed} agent avatar(s) now use persistent data URIs`);
+    } else {
+      logger.info('[AvatarFix] All agent avatars are present — no fixes needed');
     }
   } catch (e) {
     logger.error('[AvatarFix] Error:', e.message);
+  }
+}
+
+/**
+ * One-time migration: converts ALL agents that still have local /images/ paths
+ * to data URIs stored in MongoDB. Runs only once — after conversion, agents have
+ * data URIs and this function becomes a no-op. Safe to leave enabled.
+ */
+async function migrateAllAvatarsToDataUri() {
+  try {
+    const db = mongoose.connection.db;
+    if (!db) return;
+
+    const agents = await db
+      .collection('agents')
+      .find(
+        { 'avatar.source': 'local', 'avatar.filepath': { $regex: '^/images/' } },
+        { projection: { name: 1, avatar: 1 } },
+      )
+      .toArray();
+
+    if (agents.length === 0) {
+      return;
+    }
+
+    let converted = 0;
+    for (const agent of agents) {
+      try {
+        const dataUri = generateSvgDataUri(agent.name);
+        await db.collection('agents').updateOne(
+          { _id: agent._id },
+          { $set: { avatar: { filepath: dataUri, source: 'local' } } },
+        );
+        converted++;
+      } catch (e) {
+        logger.error(`[AvatarMigrate] Failed for "${agent.name}": ${e.message}`);
+      }
+    }
+
+    if (converted > 0) {
+      logger.info(`[AvatarMigrate] Converted ${converted} agent(s) to persistent data-URI avatars`);
+    }
+  } catch (e) {
+    logger.error('[AvatarMigrate] Error:', e.message);
   }
 }
 
@@ -284,4 +335,5 @@ async function checkMigrations() {
 module.exports = {
   checkMigrations,
   fixMissingAgentAvatars,
+  migrateAllAvatarsToDataUri,
 };
