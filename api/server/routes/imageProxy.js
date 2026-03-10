@@ -157,7 +157,14 @@ async function imageRequestHandler(req, res) {
     output = await pollRunpodJob(endpointId, jobId, apiKey);
   } catch (err) {
     logger.error('[imageProxy] RunPod polling failed:', err.message);
-    return res.json(makeResponse(`Erro ao gerar imagem: ${err.message}`));
+    const isModelMissing = err.message.includes('No image model available') || err.message.includes('model');
+    const isNoGpu = err.message.includes('Sem GPU') || err.message.includes('cancelada');
+    const userMsg = isModelMissing
+      ? 'O servidor de imagem está reiniciando. Aguarde 2-3 minutos e tente novamente.'
+      : isNoGpu
+        ? err.message
+        : `Erro ao gerar imagem: ${err.message}`;
+    return res.json(makeResponse(userMsg));
   }
 
   const base64 = output?.image;
