@@ -151,6 +151,65 @@ async function logAgentAvatarDiagnostics() {
 }
 
 
+async function ensureGlobalAgentsPublicAccess() {
+  try {
+    const globalProject = await getProjectByName(Constants.GLOBAL_PROJECT_NAME, ['agentIds']);
+    const globalAgentIds = globalProject?.agentIds ?? [];
+
+    if (globalAgentIds.length === 0) {
+      logger.info('[Migration] No global agents found — skipping public access check');
+      return;
+    }
+
+    const viewerRole = await findRoleByIdentifier(AccessRoleIds.AGENT_VIEWER);
+    if (!viewerRole) {
+      logger.error('[Migration] AGENT_VIEWER role not found — cannot ensure public access');
+      return;
+    }
+
+    const db = mongoose.connection.db;
+    let added = 0;
+
+    for (const agentId of globalAgentIds) {
+      try {
+        const agent = await Agent.findOne({ id: agentId }, '_id id name author isCollaborative').lean();
+        if (!agent) continue;
+
+        const existingPublic = await db.collection('aclentries').findOne({
+          resourceId: agent._id,
+          resourceType: ResourceType.AGENT,
+          principalType: PrincipalType.PUBLIC,
+        });
+
+        if (existingPublic) continue;
+
+        const publicRole = agent.isCollaborative ? AccessRoleIds.AGENT_EDITOR : AccessRoleIds.AGENT_VIEWER;
+        await grantPermission({
+          principalType: PrincipalType.PUBLIC,
+          principalId: null,
+          resourceType: ResourceType.AGENT,
+          resourceId: agent._id,
+          accessRoleId: publicRole,
+          grantedBy: agent.author,
+        });
+        added++;
+        logger.info(`[Migration] Added PUBLIC access for global agent "${agent.name}"`);
+      } catch (e) {
+        logger.error(`[Migration] Failed to add public access for agent ${agentId}: ${e.message}`);
+      }
+    }
+
+    if (added > 0) {
+      logger.info(`[Migration] Added PUBLIC access for ${added} global agent(s)`);
+    } else {
+      logger.info(`[Migration] All ${globalAgentIds.length} global agent(s) already have public access`);
+    }
+  } catch (e) {
+    logger.error('[Migration] ensureGlobalAgentsPublicAccess failed:', e.message);
+  }
+}
+
+
 async function checkMigrations() {
   try {
     const agentMigrationResult = await checkAgentPermissionsMigration({
@@ -169,6 +228,7 @@ async function checkMigrations() {
       const result = await runAgentPermissionsMigration();
       logger.info('[Migration] Agent permissions migration completed', result);
     }
+    await ensureGlobalAgentsPublicAccess();
   } catch (error) {
     logger.error('[Migration] Failed to check/run agent permissions migration:', error);
   }
