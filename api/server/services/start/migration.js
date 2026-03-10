@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const mongoose = require('mongoose');
 const { logger } = require('@librechat/data-schemas');
 const { ensureRequiredCollectionsExist } = require('@librechat/api');
@@ -109,6 +111,46 @@ async function runAgentPermissionsMigration() {
   return results;
 }
 
+async function logAgentAvatarDiagnostics() {
+  try {
+    const db = mongoose.connection.db;
+    if (!db) return;
+
+    const agents = await db.collection('agents').find(
+      {},
+      { projection: { name: 1, id: 1, avatar: 1, author: 1 } }
+    ).toArray();
+
+    const imagesBase = path.resolve(__dirname, '..', '..', '..', '..', 'client', 'public', 'images');
+    logger.info(`[AvatarDiag] Images directory: ${imagesBase}`);
+    logger.info(`[AvatarDiag] Total agents: ${agents.length}`);
+
+    for (const agent of agents) {
+      const av = agent.avatar;
+      if (!av || !av.filepath) {
+        logger.info(`[AvatarDiag] ${agent.name}: NO_AVATAR (source=none)`);
+        continue;
+      }
+
+      const source = av.source || 'unknown';
+      const fp = av.filepath;
+
+      if (source === 'local') {
+        const urlPath = fp.split('?')[0];
+        const relPath = urlPath.startsWith('/images/') ? urlPath.slice('/images/'.length) : urlPath;
+        const absPath = path.join(imagesBase, relPath);
+        const exists = fs.existsSync(absPath);
+        logger.info(`[AvatarDiag] ${agent.name}: source=${source} exists=${exists} path=${relPath}`);
+      } else {
+        logger.info(`[AvatarDiag] ${agent.name}: source=${source} filepath=${fp.substring(0, 80)}`);
+      }
+    }
+  } catch (e) {
+    logger.error('[AvatarDiag] Error running diagnostics:', e.message);
+  }
+}
+
+
 async function checkMigrations() {
   try {
     const agentMigrationResult = await checkAgentPermissionsMigration({
@@ -147,4 +189,5 @@ async function checkMigrations() {
 
 module.exports = {
   checkMigrations,
+  logAgentAvatarDiagnostics,
 };

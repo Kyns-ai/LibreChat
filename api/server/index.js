@@ -26,7 +26,7 @@ const initializeOAuthReconnectManager = require('./services/initializeOAuthRecon
 const createValidateImageRequest = require('./middleware/validateImageRequest');
 const { jwtLogin, ldapLogin, passportLogin } = require('~/strategies');
 const { updateInterfacePermissions } = require('~/models/interface');
-const { checkMigrations } = require('./services/start/migration');
+const { checkMigrations, logAgentAvatarDiagnostics } = require('./services/start/migration');
 const initializeMCPs = require('./services/initializeMCPs');
 const configureSocialLogins = require('./socialLogins');
 const { getAppConfig } = require('./services/Config');
@@ -205,6 +205,7 @@ const startServer = async () => {
     await initializeMCPs();
     await initializeOAuthReconnectManager();
     await checkMigrations();
+    await logAgentAvatarDiagnostics();
 
     // Configure stream services (auto-detects Redis from USE_REDIS env var)
     const streamServices = createStreamServices();
