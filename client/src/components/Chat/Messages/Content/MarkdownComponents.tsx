@@ -7,7 +7,7 @@ import CodeBlock from '~/components/Messages/Content/CodeBlock';
 import Mermaid from '~/components/Messages/Content/Mermaid';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import { useFileDownload } from '~/data-provider';
-import { useCodeBlockContext } from '~/Providers';
+import { useCodeBlockContext, useMessageContext } from '~/Providers';
 import { handleDoubleClick } from '~/utils';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
@@ -169,7 +169,39 @@ type TParagraphProps = {
 };
 
 export const p: React.ElementType = memo(({ children }: TParagraphProps) => {
-  return <p className="mb-2 whitespace-pre-wrap">{children}</p>;
+  const { isCharacterMessage } = useMessageContext();
+
+  if (!isCharacterMessage) {
+    return <p className="mb-2 whitespace-pre-wrap">{children}</p>;
+  }
+
+  const processDialogue = (child: React.ReactNode): React.ReactNode => {
+    if (typeof child !== 'string') return child;
+    const parts: React.ReactNode[] = [];
+    let remaining = child;
+    let key = 0;
+    const quoteRe = /("(?:[^"\\]|\\.)*")/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = quoteRe.exec(remaining)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(remaining.slice(lastIndex, match.index));
+      }
+      parts.push(
+        <span key={key++} className="dialogue">
+          {match[1]}
+        </span>,
+      );
+      lastIndex = match.index + match[1].length;
+    }
+    if (lastIndex < remaining.length) {
+      parts.push(remaining.slice(lastIndex));
+    }
+    return parts.length > 0 ? parts : child;
+  };
+
+  const processedChildren = React.Children.map(children, processDialogue);
+  return <p className="mb-2 whitespace-pre-wrap">{processedChildren}</p>;
 });
 
 type TImageProps = {

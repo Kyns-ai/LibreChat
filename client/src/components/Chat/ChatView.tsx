@@ -78,10 +78,7 @@ function ChatView({ index = 0 }: { index?: number }) {
   });
 
   const agentGreetingTree = useMemo(() => {
-    const isNewConvo =
-      conversationId === Constants.NEW_CONVO || conversationId == null || conversationId === '';
     if (
-      isNewConvo &&
       conversation?.endpoint != null &&
       isAgentsEndpoint(conversation.endpoint) &&
       conversation.agent_id &&
@@ -103,12 +100,16 @@ function ChatView({ index = 0 }: { index?: number }) {
     agentsMap,
   ]);
 
-  const effectiveMessagesTree =
-    (messagesTree && messagesTree.length > 0) || !agentGreetingTree
-      ? messagesTree
-      : agentGreetingTree?.length
-        ? agentGreetingTree
-        : null;
+  const effectiveMessagesTree = useMemo(() => {
+    const hasRealMessages = messagesTree != null && messagesTree.length > 0;
+    if (!hasRealMessages) {
+      return agentGreetingTree?.length ? agentGreetingTree : null;
+    }
+    if (agentGreetingTree?.length) {
+      return [...agentGreetingTree, ...messagesTree];
+    }
+    return messagesTree;
+  }, [messagesTree, agentGreetingTree]);
 
   const chatHelpers = useChatHelpers(index, conversationId);
   const addedChatHelpers = useAddedResponse();

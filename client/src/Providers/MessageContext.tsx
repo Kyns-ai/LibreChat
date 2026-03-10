@@ -6,6 +6,8 @@ type MessageContext = {
   partIndex?: number;
   isExpanded: boolean;
   conversationId?: string | null;
+  /** Whether this message is from a Character/Agent endpoint */
+  isCharacterMessage?: boolean;
   /** Submission state for cursor display - only true for latest message when submitting */
   isSubmitting?: boolean;
   /** Whether this is the latest message in the conversation */

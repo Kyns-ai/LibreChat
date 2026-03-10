@@ -385,10 +385,61 @@ async function restrictUserAgentCreation() {
 }
 
 
+
+const RP_FORMATTING_INSTRUCTIONS = `
+
+---
+Formate suas respostas assim:
+- Use *asteriscos* para narração, ações e descrições
+- Use "aspas" para diálogo falado
+- Separe cada bloco de narração e diálogo com uma linha em branco
+- Nunca misture narração e diálogo no mesmo parágrafo
+
+Exemplo de formato correto:
+
+*Ele se recosta na cadeira, cruzando os braços com um sorriso preguiçoso.*
+
+"Então você finalmente apareceu. Tava começando a achar que ia ter que comer todo esse mochi sozinho."
+
+*Seus olhos, escondidos pela venda, parecem te avaliar mesmo assim.*
+
+"Puxa uma cadeira. A gente tem muito o que conversar."`;
+
+/**
+ * Appends RP formatting instructions to all agent system prompts that don't already have them.
+ * Safe to run on every startup — idempotent.
+ */
+async function addRpFormattingToAgents() {
+  try {
+    const db = mongoose.connection.db;
+    if (!db) return;
+
+    const agents = await db.collection('agents').find({}).toArray();
+    let updated = 0;
+
+    for (const agent of agents) {
+      const current = agent.instructions || '';
+      if (current.includes('Use *asteriscos*')) continue;
+      await db.collection('agents').updateOne(
+        { _id: agent._id },
+        { $set: { instructions: current + RP_FORMATTING_INSTRUCTIONS } },
+      );
+      updated++;
+    }
+
+    if (updated > 0) {
+      logger.info(`[AgentSetup] Added RP formatting to ${updated} agent(s)`);
+    }
+  } catch (e) {
+    logger.error(`[AgentSetup] Failed to add RP formatting: ${e.message}`);
+  }
+}
+
 module.exports = {
   checkMigrations,
   fixMissingAgentAvatars,
   migrateAllAvatarsToDataUri,
   ensureAdminRole,
   restrictUserAgentCreation,
+  addRpFormattingToAgents,
 };
