@@ -1,7 +1,14 @@
-import { MongoClient, MongoTopologyClosedError, Db, Collection, type Document } from 'mongodb'
+import { MongoClient, Db, Collection, type Document } from 'mongodb'
 
 declare global {
   var _mongoClient: MongoClient | undefined
+}
+
+function isTopologyClosedError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const err = e as { name?: string; message?: string }
+  return err.name === 'MongoTopologyClosedError' ||
+    err.message?.includes('Topology is closed') === true
 }
 
 async function createClient(): Promise<MongoClient> {
@@ -16,19 +23,20 @@ async function createClient(): Promise<MongoClient> {
   return c
 }
 
-async function getClient(): Promise<MongoClient> {
-  if (!global._mongoClient) {
-    global._mongoClient = await createClient()
-  }
-  return global._mongoClient
-}
-
 async function resetClient(): Promise<MongoClient> {
   if (global._mongoClient) {
     try { await global._mongoClient.close() } catch { /* ignore */ }
     global._mongoClient = undefined
   }
-  global._mongoClient = await createClient()
+  const c = await createClient()
+  global._mongoClient = c
+  return c
+}
+
+async function getClient(): Promise<MongoClient> {
+  if (!global._mongoClient) {
+    global._mongoClient = await createClient()
+  }
   return global._mongoClient
 }
 
@@ -38,13 +46,18 @@ export async function getDb(): Promise<Db> {
 }
 
 export async function getCollection<T extends Document = Document>(name: string): Promise<Collection<T>> {
+  const database = await getDb()
+  return database.collection<T>(name)
+}
+
+export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
-    const database = await getDb()
-    return database.collection<T>(name)
+    return await fn()
   } catch (e) {
-    if (e instanceof MongoTopologyClosedError) {
-      const c = await resetClient()
-      return c.db(process.env.MONGODB_DB_NAME ?? 'LibreChat').collection<T>(name)
+    if (isTopologyClosedError(e)) {
+      console.log('[MongoDB] Topology closed, reconnecting...')
+      await resetClient()
+      return fn()
     }
     throw e
   }
@@ -88,16 +101,4 @@ export async function setCache(key: string, data: unknown): Promise<void> {
       { $set: { data, updatedAt: new Date() } },
       { upsert: true }
     )
-}
-
-export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn()
-  } catch (e) {
-    if (e instanceof MongoTopologyClosedError) {
-      await resetClient()
-      return fn()
-    }
-    throw e
-  }
 }
