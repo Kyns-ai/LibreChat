@@ -173,11 +173,10 @@ modelSpecs:
       showIconInHeader: true
       showIconInMenu: true
       preset:
-        endpoint: "agents"
-        agent_id: "kyns-image-agent"
-        model: "llmfan46/Qwen3.5-27B-heretic-v2"
+        endpoint: "KYNSImage"
+        model: "kyns-image"
         modelLabel: "KYNS Image"
-        greeting: "Descreva a imagem que quer criar."
+        greeting: "Descreva a imagem que quer criar. Ex: \"mulher na praia ao pôr do sol, fotorrealista\""
 
 endpoints:
   openAI:
@@ -230,6 +229,18 @@ endpoints:
         temperature: 0.6
         top_p: 0.9
         max_tokens: 4500
+
+    - name: "KYNSImage"
+      apiKey: "kyns-image-internal"
+      baseURL: "http://localhost:3080/api/image-proxy"
+      iconURL: "https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-32.png"
+      modelDisplayLabel: "KYNS Image"
+      models:
+        default: ["kyns-image"]
+      titleConvo: false
+      summarize: false
+      addParams:
+        timeout: 180000
 
 webSearch:
   searchProvider: "searxng"

@@ -1,4 +1,5 @@
 const accessPermissions = require('./accessPermissions');
+const imageProxy = require('./imageProxy');
 const assistants = require('./assistants');
 const categories = require('./categories');
 const adminAuth = require('./admin/auth');
@@ -56,4 +57,5 @@ module.exports = {
   categories,
   staticRoute,
   accessPermissions,
+  imageProxy,
 };
