@@ -1,48 +1,43 @@
 import { MongoClient, Db, Collection, type Document } from 'mongodb'
 
-declare global {
-  var _mongoClient: MongoClient | undefined
-}
+let _client: MongoClient | undefined
 
 function isTopologyClosedError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false
   const err = e as { name?: string; message?: string }
   return err.name === 'MongoTopologyClosedError' ||
-    err.message?.includes('Topology is closed') === true
+    (typeof err.message === 'string' && err.message.includes('Topology is closed'))
 }
 
 async function createClient(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI
   if (!uri) throw new Error('MONGODB_URI not set')
   const c = new MongoClient(uri, {
-    maxPoolSize: 10,
-    serverSelectionTimeoutMS: 10000,
-    connectTimeoutMS: 10000,
+    maxPoolSize: 5,
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000,
+    socketTimeoutMS: 30000,
+    heartbeatFrequencyMS: 30000,
+    minHeartbeatFrequencyMS: 10000,
   })
   await c.connect()
   return c
 }
 
-async function resetClient(): Promise<MongoClient> {
-  if (global._mongoClient) {
-    try { await global._mongoClient.close() } catch { /* ignore */ }
-    global._mongoClient = undefined
+export async function connectDb(): Promise<Db> {
+  if (_client) {
+    try { await _client.close() } catch { /* ignore */ }
+    _client = undefined
   }
-  const c = await createClient()
-  global._mongoClient = c
-  return c
-}
-
-async function getClient(): Promise<MongoClient> {
-  if (!global._mongoClient) {
-    global._mongoClient = await createClient()
-  }
-  return global._mongoClient
+  _client = await createClient()
+  return _client.db(process.env.MONGODB_DB_NAME ?? 'LibreChat')
 }
 
 export async function getDb(): Promise<Db> {
-  const c = await getClient()
-  return c.db(process.env.MONGODB_DB_NAME ?? 'LibreChat')
+  if (!_client) {
+    _client = await createClient()
+  }
+  return _client.db(process.env.MONGODB_DB_NAME ?? 'LibreChat')
 }
 
 export async function getCollection<T extends Document = Document>(name: string): Promise<Collection<T>> {
@@ -55,8 +50,12 @@ export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
     return await fn()
   } catch (e) {
     if (isTopologyClosedError(e)) {
-      console.log('[MongoDB] Topology closed, reconnecting...')
-      await resetClient()
+      console.log('[MongoDB] Topology closed, resetting connection...')
+      if (_client) {
+        try { await _client.close() } catch { /* ignore */ }
+        _client = undefined
+      }
+      _client = await createClient()
       return fn()
     }
     throw e

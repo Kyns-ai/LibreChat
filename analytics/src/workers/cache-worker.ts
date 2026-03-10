@@ -1,4 +1,4 @@
-import { withRetry } from '../lib/mongodb'
+import { connectDb, withRetry } from '../lib/mongodb'
 import { getDAU, getWAU, getMAU, getRetentionRates, getCohortAnalysis, getEngagementStats } from '../lib/queries/retention'
 import { getFeatureUsage, getFeatureRetentionCorrelation } from '../lib/queries/features'
 import { getCharacterStats, getCharacterRetention } from '../lib/queries/characters'
@@ -12,13 +12,21 @@ async function safeRun<T>(label: string, fn: () => Promise<T>): Promise<void> {
   try {
     await withRetry(fn)
   } catch (e) {
-    console.error(`[CacheWorker] ${label} failed:`, e)
+    console.error(`[CacheWorker] ${label} failed:`, (e as Error).message ?? e)
   }
 }
 
 async function runAllAggregations() {
   const start = Date.now()
   console.log('[CacheWorker] Starting aggregations...')
+
+  try {
+    await connectDb()
+    console.log('[CacheWorker] MongoDB connected')
+  } catch (e) {
+    console.error('[CacheWorker] MongoDB connection failed:', (e as Error).message)
+    return
+  }
 
   await Promise.all([
     safeRun('DAU', () => getDAU(30)),
@@ -52,5 +60,5 @@ export function runCacheWorker() {
     setInterval(() => {
       runAllAggregations().catch((e) => console.error('[CacheWorker] Error:', e))
     }, 5 * 60 * 1000)
-  }, 10_000)
+  }, 15_000)
 }
