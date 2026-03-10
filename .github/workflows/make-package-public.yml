@@ -11,24 +11,29 @@ jobs:
       contents: read
 
     steps:
-      - name: Make package public (org)
+      - name: Diagnose and make public
         run: |
-          echo "Attempting to make package public..."
+          set +e
+          echo "Token scopes via API..."
+          gh api /user --jq '.login' 2>&1
+
+          echo "=== Trying org package visibility change ==="
           RESPONSE=$(gh api \
             --method PATCH \
             -H "Accept: application/vnd.github+json" \
             "/orgs/${{ github.repository_owner }}/packages/container/kyns-image-worker" \
             -f visibility=public 2>&1)
+          EC=$?
+          echo "Exit code: $EC"
           echo "Response: $RESPONSE"
-          echo "Exit code: $?"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify visibility
-        run: |
-          gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/orgs/${{ github.repository_owner }}/packages/container/kyns-image-worker" \
-            --jq '.visibility' 2>&1 || echo "Could not query package visibility"
+          if [ $EC -ne 0 ]; then
+            echo "=== Trying user package approach ==="
+            RESPONSE2=$(gh api \
+              --method GET \
+              -H "Accept: application/vnd.github+json" \
+              "/user/packages/container/kyns-image-worker" 2>&1)
+            echo "User package response: $RESPONSE2"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
