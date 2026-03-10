@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { useRecoilValue } from 'recoil';
 import { Spinner, useMediaQuery } from '@librechat/client';
 import { List, AutoSizer, CellMeasurer, CellMeasurerCache } from 'react-virtualized';
+import { isAgentsEndpoint } from 'librechat-data-provider';
 import type { TConversation } from 'librechat-data-provider';
 import { useLocalize, TranslationKeys, useFavorites, useShowMarketplace } from '~/hooks';
 import FavoritesList from '~/components/Nav/Favorites/FavoritesList';
@@ -95,6 +96,20 @@ const ChatsHeader: FC<ChatsHeaderProps> = memo(({ isExpanded, onToggle }) => {
 
 ChatsHeader.displayName = 'ChatsHeader';
 
+const SectionHeader: FC<{ labelKey: string }> = memo(({ labelKey }) => {
+  const localize = useLocalize();
+  return (
+    <div className="flex items-center gap-2 px-1 pb-1 pt-3">
+      <span className="text-xs font-bold text-text-secondary select-none">
+        {localize(labelKey as TranslationKeys) || labelKey}
+      </span>
+      <div className="h-px flex-1 bg-border-light opacity-60" />
+    </div>
+  );
+});
+
+SectionHeader.displayName = 'SectionHeader';
+
 const DateLabel: FC<{ groupName: string; isFirst?: boolean }> = memo(({ groupName, isFirst }) => {
   const localize = useLocalize();
   return (
@@ -112,7 +127,8 @@ DateLabel.displayName = 'DateLabel';
 type FlattenedItem =
   | { type: 'favorites' }
   | { type: 'chats-header' }
-  | { type: 'header'; groupName: string }
+  | { type: 'characters-header' }
+  | { type: 'header'; groupName: string; section: 'chats' | 'characters' }
   | { type: 'convo'; convo: TConversation }
   | { type: 'loading' };
 
@@ -186,26 +202,66 @@ const Conversations: FC<ConversationsProps> = ({
     [filteredConversations],
   );
 
+  const { agentConversations, chatConversations } = useMemo(() => {
+    const agents: TConversation[] = [];
+    const chats: TConversation[] = [];
+    for (const convo of filteredConversations) {
+      if (isAgentsEndpoint(convo.endpoint)) {
+        agents.push(convo);
+      } else {
+        chats.push(convo);
+      }
+    }
+    return { agentConversations: agents, chatConversations: chats };
+  }, [filteredConversations]);
+
+  const groupedAgentConversations = useMemo(
+    () => groupConversationsByDate(agentConversations),
+    [agentConversations],
+  );
+
+  const groupedChatConversations = useMemo(
+    () => groupConversationsByDate(chatConversations),
+    [chatConversations],
+  );
+
   const flattenedItems = useMemo(() => {
     const items: FlattenedItem[] = [];
-    // Only include favorites row if FavoritesList will render content
     if (shouldShowFavorites) {
       items.push({ type: 'favorites' });
     }
     items.push({ type: 'chats-header' });
 
     if (isChatsExpanded) {
-      groupedConversations.forEach(([groupName, convos]) => {
-        items.push({ type: 'header', groupName });
-        items.push(...convos.map((convo) => ({ type: 'convo' as const, convo })));
-      });
+      if (agentConversations.length > 0) {
+        items.push({ type: 'characters-header' });
+        groupedAgentConversations.forEach(([groupName, convos]) => {
+          items.push({ type: 'header', groupName, section: 'characters' });
+          items.push(...convos.map((convo) => ({ type: 'convo' as const, convo })));
+        });
+      }
+
+      if (chatConversations.length > 0) {
+        groupedChatConversations.forEach(([groupName, convos]) => {
+          items.push({ type: 'header', groupName, section: 'chats' });
+          items.push(...convos.map((convo) => ({ type: 'convo' as const, convo })));
+        });
+      }
 
       if (isLoading) {
         items.push({ type: 'loading' } as any);
       }
     }
     return items;
-  }, [groupedConversations, isLoading, isChatsExpanded, shouldShowFavorites]);
+  }, [
+    agentConversations,
+    chatConversations,
+    groupedAgentConversations,
+    groupedChatConversations,
+    isLoading,
+    isChatsExpanded,
+    shouldShowFavorites,
+  ]);
 
   // Store flattenedItems in a ref for keyMapper to access without recreating cache
   const flattenedItemsRef = useRef(flattenedItems);
@@ -228,8 +284,11 @@ const Conversations: FC<ConversationsProps> = ({
           if (item.type === 'chats-header') {
             return 'chats-header';
           }
+          if (item.type === 'characters-header') {
+            return 'characters-header';
+          }
           if (item.type === 'header') {
-            return `header-${item.groupName}`;
+            return `header-${item.section}-${item.groupName}`;
           }
           if (item.type === 'convo') {
             return `convo-${item.convo.conversationId}`;
@@ -297,10 +356,15 @@ const Conversations: FC<ConversationsProps> = ({
         );
       }
 
+      if (item.type === 'characters-header') {
+        return (
+          <MeasuredRow key={key} {...rowProps}>
+            <SectionHeader labelKey="com_agents_marketplace" />
+          </MeasuredRow>
+        );
+      }
+
       if (item.type === 'header') {
-        // First date header index depends on whether favorites row is included
-        // With favorites: [favorites, chats-header, first-header] → index 2
-        // Without favorites: [chats-header, first-header] → index 1
         const firstHeaderIndex = shouldShowFavorites ? 2 : 1;
         return (
           <MeasuredRow key={key} {...rowProps}>

@@ -5,8 +5,9 @@ import { Constants } from 'librechat-data-provider';
 import { useToastContext, useMediaQuery } from '@librechat/client';
 import type { TConversation } from 'librechat-data-provider';
 import { useUpdateConversationMutation } from '~/data-provider';
-import EndpointIcon from '~/components/Endpoints/EndpointIcon';
+import ConvoIcon from '~/components/Endpoints/ConvoIcon';
 import { useNavigateToConvo, useLocalize, useShiftKey } from '~/hooks';
+import { useAgentsMapContext, useAssistantsMapContext } from '~/Providers';
 import { useGetEndpointsQuery } from '~/data-provider';
 import { NotificationSeverity } from '~/common';
 import { ConvoOptions } from './ConvoOptions';
@@ -33,6 +34,8 @@ export default function Conversation({
   const { showToast } = useToastContext();
   const { navigateToConvo } = useNavigateToConvo();
   const { data: endpointsConfig } = useGetEndpointsQuery();
+  const agentsMap = useAgentsMapContext();
+  const assistantMap = useAssistantsMapContext();
   const currentConvoId = useMemo(() => params.conversationId, [params.conversationId]);
   const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
   const activeConvos = useRecoilValue(store.allConversationsSelector);
@@ -257,12 +260,16 @@ export default function Conversation({
               />
             </svg>
           ) : (
-            <EndpointIcon
-              conversation={conversation}
-              endpointsConfig={endpointsConfig}
-              size={20}
-              context="menu-item"
-            />
+            <div className="h-5 w-5 flex-shrink-0 overflow-hidden rounded-full">
+              <ConvoIcon
+                conversation={conversation}
+                endpointsConfig={endpointsConfig}
+                assistantMap={assistantMap}
+                agentsMap={agentsMap}
+                size={20}
+                context="menu-item"
+              />
+            </div>
           )}
         </ConvoLink>
       )}
