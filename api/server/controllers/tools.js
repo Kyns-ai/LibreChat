@@ -46,8 +46,15 @@ const verifyWebSearchAuth = async (req, res) => {
       throwError: false,
     });
 
+    // Scrapers and rerankers are optional enhancements. If the search provider
+    // (e.g. SearXNG) resolved successfully, treat overall auth as successful
+    // even if scrapers/rerankers have no credentials configured.
+    const authenticated = result.authResult?.searchProvider
+      ? true
+      : result.authenticated;
+
     return res.status(200).json({
-      authenticated: result.authenticated,
+      authenticated,
       authTypes: result.authTypes,
     });
   } catch (error) {
