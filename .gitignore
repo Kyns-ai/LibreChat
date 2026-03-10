@@ -174,7 +174,9 @@ claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
 
-# Allow analytics admin logs route
+# Allow analytics logs routes
 !analytics/src/app/api/admin/logs/
 !analytics/src/app/api/admin/logs/route.ts
+!analytics/src/app/dashboard/logs/
+!analytics/src/app/dashboard/logs/page.tsx
 .kyns-session.json
