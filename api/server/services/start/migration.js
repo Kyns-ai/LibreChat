@@ -10,7 +10,7 @@ const {
   checkPromptPermissionsMigration,
 } = require('@librechat/api');
 const { grantPermission } = require('~/server/services/PermissionService');
-const { getProjectByName } = require('~/models/Project');
+const { getProjectByName, addAgentIdsToProject } = require('~/models/Project');
 const { Agent, PromptGroup } = require('~/db/models');
 const { findRoleByIdentifier } = require('~/models');
 
@@ -161,7 +161,6 @@ async function ensureGlobalAgentsPublicAccess() {
       return;
     }
 
-    // Find all agents NOT named "KYNS Image" (the old image agent we replaced with a proxy)
     const allAgents = await Agent.find({ name: { $ne: 'KYNS Image' } }, '_id id name author isCollaborative').lean();
     if (allAgents.length === 0) {
       logger.info('[Migration] No agents found — skipping public access check');
@@ -171,23 +170,15 @@ async function ensureGlobalAgentsPublicAccess() {
     const globalProject = await getProjectByName(Constants.GLOBAL_PROJECT_NAME, ['_id', 'agentIds']);
     const globalAgentIdsSet = new Set(globalProject?.agentIds ?? []);
 
-    const Project = mongoose.connection.model('Project') || db.collection('projects');
-    let addedToProject = 0;
-    let addedPublicAccess = 0;
+    const agentIdsToAdd = allAgents.filter((a) => !globalAgentIdsSet.has(a.id)).map((a) => a.id);
+    if (agentIdsToAdd.length > 0 && globalProject?._id) {
+      await addAgentIdsToProject(globalProject._id, agentIdsToAdd);
+      logger.info(`[Migration] Added ${agentIdsToAdd.length} agent(s) to global project`);
+    }
 
+    let addedPublicAccess = 0;
     for (const agent of allAgents) {
       try {
-        // Add to global project if not already there
-        if (!globalAgentIdsSet.has(agent.id)) {
-          await db.collection('projects').updateOne(
-            { name: Constants.GLOBAL_PROJECT_NAME },
-            { $addToSet: { agentIds: agent.id } },
-          );
-          addedToProject++;
-          logger.info(`[Migration] Added agent "${agent.name}" to global project`);
-        }
-
-        // Ensure PUBLIC ACL entry exists
         const existingPublic = await db.collection('aclentries').findOne({
           resourceId: agent._id,
           resourceType: ResourceType.AGENT,
@@ -212,13 +203,13 @@ async function ensureGlobalAgentsPublicAccess() {
       }
     }
 
-    if (addedToProject > 0 || addedPublicAccess > 0) {
-      logger.info(`[Migration] Global agents: added ${addedToProject} to project, added ${addedPublicAccess} PUBLIC ACL entries`);
+    if (agentIdsToAdd.length > 0 || addedPublicAccess > 0) {
+      logger.info(`[Migration] Done: ${agentIdsToAdd.length} added to project, ${addedPublicAccess} PUBLIC ACL entries added`);
     } else {
       logger.info(`[Migration] All ${allAgents.length} agents already have global access`);
     }
   } catch (e) {
-    logger.error('[Migration] ensureGlobalAgentsPublicAccess failed:', e.message);
+    logger.error(`[Migration] ensureGlobalAgentsPublicAccess failed: ${e.message}`);
   }
 }
 
