@@ -10,7 +10,7 @@ const paths = require('~/config/paths');
 const PROXY_API_KEY = process.env.IMAGE_PROXY_KEY || 'kyns-image-internal';
 const POLL_INTERVAL_MS = 5000;
 const POLL_TIMEOUT_MS = 300_000;
-const NO_WORKER_CANCEL_MS = 120_000;
+const NO_WORKER_CANCEL_MS = 240_000;
 const WATERMARK_TEXT = 'kyns.ai';
 
 const router = express.Router();
