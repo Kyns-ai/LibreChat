@@ -60,4 +60,7 @@ const transactionSchema: Schema<ITransaction> = new Schema(
   },
 );
 
+/** Auto-delete transaction records older than 90 days */
+transactionSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+
 export default transactionSchema;

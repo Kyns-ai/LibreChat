@@ -13,6 +13,8 @@
     "add-balance": "node config/add-balance.js",
     "set-balance": "node config/set-balance.js",
     "list-balances": "node config/list-balances.js",
+    "mongo-cleanup": "node config/mongo-cleanup.js",
+    "mongo-cleanup:dry": "node config/mongo-cleanup.js --dry-run",
     "user-stats": "node config/user-stats.js",
     "rebuild:package-lock": "node config/packages",
     "reinstall": "node config/update.js -l -g",

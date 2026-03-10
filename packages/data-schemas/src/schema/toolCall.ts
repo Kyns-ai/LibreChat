@@ -51,5 +51,7 @@ const toolCallSchema: Schema<IToolCallData> = new Schema(
 
 toolCallSchema.index({ messageId: 1, user: 1 });
 toolCallSchema.index({ conversationId: 1, user: 1 });
+/** Auto-delete tool call records older than 90 days */
+toolCallSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
 
 export default toolCallSchema;
