@@ -167,7 +167,7 @@ async function ensureGlobalAgentsPublicAccess() {
       return;
     }
 
-    const globalProject = await getProjectByName(Constants.GLOBAL_PROJECT_NAME, ['_id', 'agentIds']);
+    const globalProject = await getProjectByName(Constants.GLOBAL_PROJECT_NAME, '_id agentIds');
     const globalAgentIdsSet = new Set(globalProject?.agentIds ?? []);
 
     const agentIdsToAdd = allAgents.filter((a) => !globalAgentIdsSet.has(a.id)).map((a) => a.id);
