@@ -12,8 +12,27 @@ const {
   validateSettingDefinitions,
 } = require('librechat-data-provider');
 
+const fs = require('fs');
+
 const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
 const defaultConfigPath = path.resolve(projectRoot, 'librechat.yaml');
+
+/** Bootstrap librechat.yaml from env var if not present on disk (e.g. Nixpacks builds) */
+function ensureConfigFile() {
+  const targetPath = process.env.CONFIG_PATH || defaultConfigPath;
+  if (fs.existsSync(targetPath)) return;
+  const b64 = process.env.LIBRECHAT_YAML_B64;
+  if (!b64) return;
+  try {
+    const content = Buffer.from(b64, 'base64').toString('utf-8');
+    fs.writeFileSync(targetPath, content, 'utf-8');
+    logger.info(`[Config] Wrote librechat.yaml from LIBRECHAT_YAML_B64 to ${targetPath}`);
+  } catch (e) {
+    logger.error(`[Config] Failed to write librechat.yaml from env var: ${e.message}`);
+  }
+}
+
+ensureConfigFile();
 
 let i = 0;
 
