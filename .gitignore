@@ -173,3 +173,7 @@ claude-flow.config.json
 claude-flow
 # Removed Windows wrapper files per user request
 hive-mind-prompt-*.txt
+
+# Allow analytics admin logs route
+!analytics/src/app/api/admin/logs/
+!analytics/src/app/api/admin/logs/route.ts
