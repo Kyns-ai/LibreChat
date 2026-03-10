@@ -253,7 +253,7 @@ endpoints:
 
     - name: "KYNSImage"
       apiKey: "kyns-image-internal"
-      baseURL: "http://localhost:3080/api/image-proxy"
+      baseURL: "http://localhost:${PORT}/api/image-proxy"
       iconURL: "https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-32.png"
       modelDisplayLabel: "KYNS Image"
       models:

@@ -93,7 +93,7 @@ function makeResponse(content) {
   };
 }
 
-router.post('/v1/chat/completions', async (req, res) => {
+async function imageRequestHandler(req, res) {
   const authHeader = req.headers.authorization || '';
   if (!authHeader.includes(PROXY_API_KEY)) {
     return res.status(401).json({ error: { message: 'Unauthorized', type: 'auth_error' } });
@@ -161,6 +161,9 @@ router.post('/v1/chat/completions', async (req, res) => {
   const content = `![Imagem gerada](${imageUrl})\n\n_Gerada por KYNS Image · ${modelLabel} · ${params.width}×${params.height}px_`;
 
   return res.json(makeResponse(content));
-});
+}
+
+router.post('/chat/completions', imageRequestHandler);
+router.post('/v1/chat/completions', imageRequestHandler);
 
 module.exports = router;
