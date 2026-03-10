@@ -18,6 +18,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -25,11 +28,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Log in to Docker Hub (if secrets configured)
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
+      - name: Extract metadata (GHCR)
+        id: meta-ghcr
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/kyns-image-worker
@@ -37,25 +44,34 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
+      - name: Extract metadata (Docker Hub)
+        id: meta-hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/kyns-image-worker
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+
+      - name: Build and push to GHCR
+        uses: docker/build-push-action@v6
         with:
           context: runpod/image
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-ghcr.outputs.tags }}
+          labels: ${{ steps.meta-ghcr.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      - name: Make package public
-        continue-on-error: true
-        run: |
-          gh api -X PATCH \
-            "/orgs/${{ github.repository_owner }}/packages/container/kyns-image-worker" \
-            -f visibility=public || \
-          gh api -X PATCH \
-            "/user/packages/container/kyns-image-worker" \
-            -f visibility=public || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push to Docker Hub (if configured)
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: runpod/image
+          push: true
+          tags: ${{ steps.meta-hub.outputs.tags }}
+          labels: ${{ steps.meta-hub.outputs.labels }}
+          cache-from: type=gha
+          platforms: linux/amd64
