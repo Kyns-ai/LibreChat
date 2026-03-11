@@ -164,34 +164,33 @@ def _load_from_file(model_key: str, path: str, download_url: str = "") -> "Stabl
 
 
 def load_lustify() -> "StableDiffusionXLPipeline | None":
-    local_path = os.path.join(_model_dir(), LUSTIFY_MODEL)
-    if os.path.exists(local_path):
-        pipe = _load_from_file("lustify", local_path)
-        if pipe:
-            return pipe
-
-    downloaded_path = _download_hf_file("lustify", LUSTIFY_HF_MODEL, LUSTIFY_MODEL)
-    if downloaded_path:
-        pipe = _load_from_file("lustify", downloaded_path)
-        if pipe:
-            return pipe
+    pipe = _load_diffusers_pipeline("lustify", LUSTIFY_HF_MODEL)
+    if pipe:
+        return pipe
 
     if LUSTIFY_MODEL_URL:
+        local_path = os.path.join(_model_dir(), LUSTIFY_MODEL)
         return _load_from_file("lustify", local_path, LUSTIFY_MODEL_URL)
 
     return None
 
 
 def load_zimage() -> "StableDiffusionXLPipeline | None":
-    pipe = _load_diffusers_pipeline("zimage", ZIMAGE_HF_MODEL)
-    if pipe:
-        return pipe
-
     local_path = os.path.join(_model_dir(), ZIMAGE_MODEL)
     if os.path.exists(local_path):
         pipe = _load_from_file("zimage", local_path)
         if pipe:
             return pipe
+
+    downloaded_path = _download_hf_file("zimage", ZIMAGE_HF_MODEL, ZIMAGE_MODEL)
+    if downloaded_path:
+        pipe = _load_from_file("zimage", downloaded_path)
+        if pipe:
+            return pipe
+
+    pipe = _load_diffusers_pipeline("zimage", ZIMAGE_HF_MODEL)
+    if pipe:
+        return pipe
 
     if ZIMAGE_MODEL_URL:
         return _load_from_file("zimage", local_path, ZIMAGE_MODEL_URL)
