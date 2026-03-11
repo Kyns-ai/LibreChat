@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx libglib2.0-0 wget curl \
+    libgl1 libglib2.0-0 wget curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /requirements.txt
@@ -19,7 +19,7 @@ COPY handler.py /handler.py
 ENV VOLUME_PATH=/runpod-volume
 ENV HF_HOME=/runpod-volume/hf-cache
 ENV TRANSFORMERS_CACHE=/runpod-volume/hf-cache
-ENV LUSTIFY_MODEL=lustify_model.safetensors
-ENV ZIMAGE_MODEL=zimage_model.safetensors
+ENV LUSTIFY_MODEL=lustifySDXLNSFW_ggwpV7.safetensors
+ENV ZIMAGE_MODEL=sd_xl_turbo_1.0_fp16.safetensors
 
 CMD ["python3", "/handler.py"]
