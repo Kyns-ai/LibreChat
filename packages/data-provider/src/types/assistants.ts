@@ -277,6 +277,8 @@ export type Agent = {
   support_contact?: SupportContact;
   /** Per-tool configuration options (deferred loading, allowed callers, etc.) */
   tool_options?: AgentToolOptions;
+  /** TTS voice ID assigned to this agent */
+  voice?: string | null;
 };
 
 export type TAgentsMap = Record<string, Agent | undefined>;
@@ -302,6 +304,7 @@ export type AgentCreateParams = {
   | 'category'
   | 'support_contact'
   | 'tool_options'
+  | 'voice'
 >;
 
 export type AgentUpdateParams = {
@@ -329,6 +332,7 @@ export type AgentUpdateParams = {
   | 'category'
   | 'support_contact'
   | 'tool_options'
+  | 'voice'
 >;
 
 export type AgentListParams = {

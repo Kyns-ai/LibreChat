@@ -505,6 +505,8 @@ export type TMessageAudio = {
   messageId: string;
   content: string;
   className?: string;
+  /** Voice ID from the agent, overrides the global voice setting */
+  agentVoice?: string | null;
   renderButton?: (props: {
     onClick: (e?: React.MouseEvent<HTMLButtonElement>) => void;
     title: string;

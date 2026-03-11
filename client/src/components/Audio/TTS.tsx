@@ -107,6 +107,7 @@ export function ExternalTTS({
   content,
   className,
   renderButton,
+  agentVoice,
 }: TMessageAudio) {
   const localize = useLocalize();
   const playbackRate = useRecoilValue(store.playbackRate);
@@ -116,6 +117,7 @@ export function ExternalTTS({
     index,
     messageId,
     content,
+    agentVoice,
   });
 
   const renderIcon = () => {

@@ -15,6 +15,7 @@ import { ToolSelectDialog, MCPToolSelectDialog } from '~/components/Tools';
 import useAgentCapabilities from '~/hooks/Agents/useAgentCapabilities';
 import { useFileMapContext, useAgentPanelContext } from '~/Providers';
 import AgentCategorySelector from './AgentCategorySelector';
+import AgentVoiceSelector from './AgentVoiceSelector';
 import Action from '~/components/SidePanel/Builder/Action';
 import { useLocalize, useVisibleTools } from '~/hooks';
 import { Panel, isEphemeralAgent } from '~/common';
@@ -388,6 +389,11 @@ export default function AgentConfig() {
               )}
             </div>
           </div>
+        </div>
+        {/* Voice */}
+        <div className="mb-4">
+          <label className={labelClass}>{localize('com_nav_text_to_speech')}</label>
+          <AgentVoiceSelector />
         </div>
         {/* Support Contact (Optional) */}
         <div className="mb-4">

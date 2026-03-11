@@ -1,7 +1,7 @@
 // client/src/hooks/Audio/useTTSExternal.ts
 import { useRef, useEffect, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { extractThinkingContent, parseTextParts } from 'librechat-data-provider';
+import { extractThinkingContent, parseTextParts, sanitizeTextForTTS } from 'librechat-data-provider';
 import type { TMessageContentParts } from 'librechat-data-provider';
 import useTextToSpeechExternal from '~/hooks/Input/useTextToSpeechExternal';
 import usePauseGlobalAudio from '~/hooks/Audio/usePauseGlobalAudio';
@@ -14,10 +14,12 @@ type TUseTextToSpeech = {
   content?: TMessageContentParts[] | string;
   isLast?: boolean;
   index?: number;
+  /** Voice ID from the agent, overrides the global voice setting */
+  agentVoice?: string | null;
 };
 
 const useTTSExternal = (props?: TUseTextToSpeech) => {
-  const { messageId, content, isLast = false, index = 0 } = props ?? {};
+  const { messageId, content, isLast = false, index = 0, agentVoice } = props ?? {};
 
   const isMouseDownRef = useRef(false);
   const timerRef = useRef<number | undefined>(undefined);
@@ -40,6 +42,7 @@ const useTTSExternal = (props?: TUseTextToSpeech) => {
     messageId,
     isLast,
     index,
+    agentVoice,
   });
 
   useEffect(() => {
@@ -56,16 +59,19 @@ const useTTSExternal = (props?: TUseTextToSpeech) => {
     }
   }, [setVoice, voice, voices]);
 
+  const prepareTextForTTS = (messageContent: TMessageContentParts[] | string) => {
+    const raw =
+      typeof messageContent === 'string'
+        ? extractThinkingContent(messageContent).regularContent
+        : parseTextParts(messageContent, true);
+    return sanitizeTextForTTS(raw);
+  };
+
   const handleMouseDown = () => {
     isMouseDownRef.current = true;
     timerRef.current = window.setTimeout(() => {
       if (isMouseDownRef.current) {
-        const messageContent = content ?? '';
-        const parsedMessage =
-          typeof messageContent === 'string'
-            ? extractThinkingContent(messageContent).regularContent
-            : parseTextParts(messageContent, true);
-        generateSpeech(parsedMessage, false);
+        generateSpeech(prepareTextForTTS(content ?? ''), false);
       }
     }, 1000);
   };
@@ -82,12 +88,7 @@ const useTTSExternal = (props?: TUseTextToSpeech) => {
       cancelSpeech();
       pauseGlobalAudio();
     } else {
-      const messageContent = content ?? '';
-      const parsedMessage =
-        typeof messageContent === 'string'
-          ? extractThinkingContent(messageContent).regularContent
-          : parseTextParts(messageContent, true);
-      generateSpeech(parsedMessage, false);
+      generateSpeech(prepareTextForTTS(content ?? ''), false);
     }
   };
 

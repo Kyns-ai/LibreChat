@@ -272,6 +272,7 @@ export const defaultAgentFormValues = {
     name: '',
     email: '',
   },
+  voice: null,
 };
 
 export const ImageVisionTool: FunctionTool = {

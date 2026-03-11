@@ -46,4 +46,6 @@ export interface IAgent extends Omit<Document, 'model'> {
   mcpServerNames?: string[];
   /** Per-tool configuration (defer_loading, allowed_callers) */
   tool_options?: AgentToolOptions;
+  /** TTS voice ID assigned to this agent */
+  voice?: string;
 }

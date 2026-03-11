@@ -81,6 +81,7 @@ export const agentBaseSchema = z.object({
   support_contact: agentSupportContactSchema,
   category: z.string().optional(),
   greeting: z.string().nullable().optional(),
+  voice: z.string().nullable().optional(),
 });
 
 /** Create schema extends base with required fields for creation */

@@ -22,6 +22,8 @@ type THoverButtons = {
   isLast: boolean;
   index: number;
   handleFeedback?: ({ feedback }: { feedback: TFeedback | undefined }) => void;
+  /** Voice ID from the agent, overrides the global voice setting */
+  agentVoice?: string | null;
 };
 
 type HoverButtonProps = {
@@ -122,6 +124,7 @@ const HoverButtons = ({
   latestMessage,
   isLast,
   handleFeedback,
+  agentVoice,
 }: THoverButtons) => {
   const localize = useLocalize();
   const [isCopied, setIsCopied] = useState(false);
@@ -193,6 +196,7 @@ const HoverButtons = ({
           isLast={isLast}
           messageId={message.messageId}
           content={extractMessageContent(message)}
+          agentVoice={agentVoice}
           renderButton={(props) => (
             <HoverButton
               onClick={props.onClick}

@@ -18,6 +18,8 @@ type TUseTTSExternal = {
   messageId?: string;
   isLast: boolean;
   index?: number;
+  /** Voice ID from the agent, overrides the global voice setting */
+  agentVoice?: string | null;
 };
 
 function useTextToSpeechExternal({
@@ -26,10 +28,12 @@ function useTextToSpeechExternal({
   messageId,
   isLast,
   index = 0,
+  agentVoice,
 }: TUseTTSExternal) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const voice = useRecoilValue(store.voice);
+  const globalVoice = useRecoilValue(store.voice);
+  const voice = agentVoice ?? globalVoice;
   const cacheTTS = useRecoilValue(store.cacheTTS);
   const playbackRate = useRecoilValue(store.playbackRate);
 

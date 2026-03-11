@@ -127,6 +127,11 @@ const agentSchema = new Schema<IAgent>(
       type: Schema.Types.Mixed,
       default: undefined,
     },
+    /** TTS voice ID assigned to this agent */
+    voice: {
+      type: String,
+      default: undefined,
+    },
   },
   {
     timestamps: true,

@@ -17,6 +17,13 @@ function MessageAudio(props: TMessageAudio) {
   if (!SelectedTTS) {
     return null;
   }
+
+  // BrowserTTS doesn't support agentVoice, omit it to avoid prop warnings
+  if (engineTTS === TTSEndpoints.browser) {
+    const { agentVoice: _agentVoice, ...browserProps } = props;
+    return <SelectedTTS {...browserProps} />;
+  }
+
   return <SelectedTTS {...props} />;
 }
 
