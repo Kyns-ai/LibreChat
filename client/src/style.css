@@ -2957,9 +2957,9 @@ html {
   margin-bottom: 0;
 }
 
-/* Dialogue: text wrapped in "quotes" */
+/* Dialogue: text wrapped in "quotes" — white so it stands out from grey narration */
 .character-message .dialogue {
-  color: #c8b8e8 !important;
+  color: #ffffff !important;
   font-style: normal;
 }
 
@@ -2972,5 +2972,5 @@ html {
 }
 
 .light .character-message .dialogue {
-  color: #5a3fa0 !important;
+  color: #1a1a2e !important;
 }

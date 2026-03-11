@@ -803,7 +803,7 @@ class AgentClient extends BaseClient {
 
       const toolSet = buildToolSet(this.options.agent);
       let { messages: initialMessages, indexTokenCountMap } = formatAgentMessages(
-        payload,
+        payload.filter(Boolean),
         this.indexTokenCountMap,
         toolSet,
       );
