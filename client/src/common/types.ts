@@ -503,7 +503,7 @@ export type TMessageAudio = {
   isLast?: boolean;
   index: number;
   messageId: string;
-  content: string;
+  content: t.TMessageContentParts[] | string;
   className?: string;
   /** Voice ID from the agent, overrides the global voice setting */
   agentVoice?: string | null;

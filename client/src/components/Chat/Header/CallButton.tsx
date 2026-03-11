@@ -1,9 +1,13 @@
 import { useState } from 'react';
-import { PhoneCall, X } from 'lucide-react';
+import { PhoneCall, X, Volume2 } from 'lucide-react';
 import { OGDialog, OGDialogContent, OGDialogTitle } from '@librechat/client';
 import { useLocalize } from '~/hooks';
 
-const CallButton: React.FC = () => {
+interface CallButtonProps {
+  hasVoice?: boolean;
+}
+
+const CallButton: React.FC<CallButtonProps> = ({ hasVoice = false }) => {
   const localize = useLocalize();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -26,13 +30,24 @@ const CallButton: React.FC = () => {
         <OGDialogContent className="max-w-sm">
           <div className="flex flex-col items-center gap-4 p-6 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary">
-              <PhoneCall className="h-8 w-8 text-text-secondary" />
+              {hasVoice ? (
+                <Volume2 className="h-8 w-8 text-text-secondary" />
+              ) : (
+                <PhoneCall className="h-8 w-8 text-text-secondary" />
+              )}
             </div>
-            <OGDialogTitle className="text-xl font-semibold">
-              {localize('com_ui_voice_call_coming_soon')}
-            </OGDialogTitle>
+            <div className="flex flex-col gap-1">
+              <OGDialogTitle className="text-xl font-semibold">
+                {localize('com_ui_voice_call_coming_soon')}
+              </OGDialogTitle>
+              <span className="inline-flex items-center justify-center rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-medium text-text-secondary">
+                {localize('com_ui_voice_call_status_coming_soon')}
+              </span>
+            </div>
             <p className="text-sm text-text-secondary">
-              {localize('com_ui_voice_call_description')}
+              {hasVoice
+                ? localize('com_ui_voice_call_has_voice')
+                : localize('com_ui_voice_call_no_voice')}
             </p>
             <button
               type="button"

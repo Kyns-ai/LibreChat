@@ -167,6 +167,7 @@ export default function Message(props: TMessageProps) {
                       handleContinue={handleContinue}
                       latestMessageId={latestMessageId}
                       isLast={isLast}
+                      agentVoice={agent?.voice}
                     />
                   </SubRow>
                 )}

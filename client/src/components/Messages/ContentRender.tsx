@@ -157,6 +157,7 @@ const ContentRender = memo(function ContentRender({
               isLatestMessage={isLatestMessage}
               isSubmitting={effectiveIsSubmitting}
               isCreatedByUser={msg.isCreatedByUser}
+              isCharacterMessage={!!agent && !msg.isCreatedByUser}
               conversationId={conversation?.conversationId}
               content={msg.content as Array<TMessageContentParts | undefined>}
             />
@@ -183,6 +184,7 @@ const ContentRender = memo(function ContentRender({
                 latestMessageId={latestMessageId}
                 handleFeedback={handleFeedback}
                 isLast={isLast}
+                agentVoice={agent?.voice}
               />
             </SubRow>
           )}

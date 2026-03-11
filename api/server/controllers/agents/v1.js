@@ -249,7 +249,7 @@ const updateAgentHandler = async (req, res) => {
     const id = req.params.id;
     const validatedData = agentUpdateSchema.parse(req.body);
     // Preserve explicit null for avatar to allow resetting the avatar
-    const { avatar: avatarField, _id, ...rest } = validatedData;
+    const { avatar: avatarField, voice: voiceField, _id, ...rest } = validatedData;
     const updateData = removeNullishValues(rest);
 
     if (updateData.model_parameters && typeof updateData.model_parameters === 'object') {
@@ -257,7 +257,11 @@ const updateAgentHandler = async (req, res) => {
     }
 
     if (avatarField === null) {
-      updateData.avatar = avatarField;
+      updateData.avatar = null;
+    }
+
+    if (voiceField !== undefined) {
+      updateData.voice = voiceField;
     }
 
     // Convert OCR to context in incoming updateData

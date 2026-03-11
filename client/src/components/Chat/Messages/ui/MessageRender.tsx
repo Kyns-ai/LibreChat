@@ -94,8 +94,9 @@ const MessageRender = memo(function MessageRender({
       isExpanded: false as const,
       isSubmitting: effectiveIsSubmitting,
       conversationId: conversation?.conversationId,
+      isCharacterMessage: !!agent && !msg.isCreatedByUser,
     }),
-    [messageId, conversation?.conversationId, effectiveIsSubmitting, isLatestMessage],
+    [messageId, conversation?.conversationId, effectiveIsSubmitting, isLatestMessage, agent, msg.isCreatedByUser],
   );
 
   if (!msg) {
@@ -192,6 +193,7 @@ const MessageRender = memo(function MessageRender({
                 latestMessageId={latestMessageId}
                 handleFeedback={handleFeedback}
                 isLast={isLast}
+                agentVoice={agent?.voice}
               />
             </SubRow>
           )}
