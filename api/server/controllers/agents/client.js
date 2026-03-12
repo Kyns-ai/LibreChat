@@ -889,10 +889,14 @@ class AgentClient extends BaseClient {
 
   isKynsImageEndpoint() {
     const endpoint = this.options.endpoint;
+    const agentEndpoint = this.options.agent?.endpoint;
     const bodyEndpoint = this.options.req?.body?.endpoint;
     const bodyEndpointOption = this.options.req?.body?.endpointOption?.endpoint;
     return (
-      endpoint === 'KYNSImage' || bodyEndpoint === 'KYNSImage' || bodyEndpointOption === 'KYNSImage'
+      endpoint === 'KYNSImage' ||
+      agentEndpoint === 'KYNSImage' ||
+      bodyEndpoint === 'KYNSImage' ||
+      bodyEndpointOption === 'KYNSImage'
     );
   }
 
@@ -940,6 +944,7 @@ class AgentClient extends BaseClient {
   /** @type {sendCompletion} */
   async sendCompletion(payload, opts = {}) {
     if (this.isKynsImageEndpoint()) {
+      logger.info('[KYNSImage] Bypass activated — skipping agent pipeline');
       try {
         const imageContent = await this.executeKynsImageRequest();
         this.contentParts.push({ type: ContentTypes.TEXT, text: imageContent });
