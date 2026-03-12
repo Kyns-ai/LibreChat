@@ -56,10 +56,11 @@ def load_flux2klein():
         pipe = Flux2KleinPipeline.from_pretrained(
             FLUX2_HF_ID,
             torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=False,
             **_hf_kwargs(),
         )
-        pipe.enable_model_cpu_offload()
-        logger.info("FLUX.2 Klein 9B loaded (CPU offload).")
+        pipe.to("cuda")
+        logger.info("FLUX.2 Klein 9B loaded on CUDA.")
         return pipe
     except Exception as e:
         logger.error("Failed to load FLUX.2 Klein 9B: %s", e)
@@ -72,6 +73,7 @@ def load_zimage():
         pipe = ZImagePipeline.from_pretrained(
             ZIMAGE_HF_ID,
             torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=False,
             **_hf_kwargs(),
         )
         pipe.to("cuda")
@@ -90,6 +92,20 @@ def preload():
     p = load_flux2klein()
     if p:
         pipes["flux2klein"] = p
+    elif FLUX2_HF_ID:
+        logger.warning("FLUX.2 Klein failed on CUDA, retrying with CPU offload…")
+        try:
+            pipe = Flux2KleinPipeline.from_pretrained(
+                FLUX2_HF_ID,
+                torch_dtype=torch.bfloat16,
+                low_cpu_mem_usage=False,
+                **_hf_kwargs(),
+            )
+            pipe.enable_model_cpu_offload()
+            pipes["flux2klein"] = pipe
+            logger.info("FLUX.2 Klein 9B loaded (CPU offload fallback).")
+        except Exception as e:
+            logger.error("FLUX.2 Klein CPU offload fallback also failed: %s", e)
 
     if not pipes:
         logger.error("No models loaded. Volume path: %s", VOLUME_PATH)
