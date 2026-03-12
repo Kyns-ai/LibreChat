@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useRef, useEffect } from 'react';
+import React, { memo, useMemo, useRef, useEffect, useState } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useToastContext } from '@librechat/client';
 import { PermissionTypes, Permissions, apiBaseUrl } from 'librechat-data-provider';
@@ -8,7 +8,7 @@ import Mermaid from '~/components/Messages/Content/Mermaid';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import { useFileDownload } from '~/data-provider';
 import { useCodeBlockContext } from '~/Providers';
-import { handleDoubleClick } from '~/utils';
+import { cn, handleDoubleClick } from '~/utils';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 
@@ -190,6 +190,8 @@ type TImageProps = {
   style?: React.CSSProperties;
 };
 
+const generatedImagePattern = /\/images\/generated\//;
+
 export const img: React.ElementType = memo(function MarkdownImage({
   src,
   alt,
@@ -197,22 +199,50 @@ export const img: React.ElementType = memo(function MarkdownImage({
   className,
   style,
 }: TImageProps) {
-  // Get the base URL from the API endpoints
+  const [loaded, setLoaded] = useState(false);
   const baseURL = apiBaseUrl();
 
-  // If src starts with /images/, prepend the base URL
   const fixedSrc = useMemo(() => {
     if (!src) return src;
-
-    // If it's already an absolute URL or doesn't start with /images/, return as is
     if (src.startsWith('http') || src.startsWith('data:') || !src.startsWith('/images/')) {
       return src;
     }
-
-    // Prepend base URL to the image path
     return `${baseURL}${src}`;
   }, [src, baseURL]);
 
-  return <img src={fixedSrc} alt={alt} title={title} className={className} style={style} />;
+  const isGenerated = useMemo(
+    () => !!fixedSrc && generatedImagePattern.test(fixedSrc),
+    [fixedSrc],
+  );
+
+  if (!isGenerated) {
+    return <img src={fixedSrc} alt={alt} title={title} className={className} style={style} />;
+  }
+
+  return (
+    <div className="relative mt-1 w-full max-w-lg overflow-hidden rounded-lg">
+      {!loaded && (
+        <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-surface-secondary">
+          <div className="flex flex-col items-center gap-3">
+            <div className="size-8 animate-spin rounded-full border-2 border-border-medium border-t-text-primary" />
+            <span className="text-sm text-text-secondary">Gerando imagem…</span>
+          </div>
+        </div>
+      )}
+      <img
+        src={fixedSrc}
+        alt={alt}
+        title={title}
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        className={cn(
+          'w-full rounded-lg transition-all duration-700 ease-out',
+          loaded ? 'opacity-100 blur-0' : 'h-0 opacity-0 blur-md',
+          className,
+        )}
+        style={style}
+      />
+    </div>
+  );
 });
 img.displayName = 'MarkdownImage';
