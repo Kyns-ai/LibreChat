@@ -909,7 +909,7 @@ class AgentClient extends BaseClient {
 
     const port = process.env.PORT || 3080;
     const spec = this.options.spec ?? body.spec ?? '';
-    const model = spec.includes('turbo') ? 'zimage' : 'lustify';
+    const model = spec.includes('turbo') ? 'zimage' : 'flux2klein';
     logger.info(`[KYNSImage] spec=${spec} → model=${model}`);
 
     const response = await fetch(`http://127.0.0.1:${port}/api/image-proxy/chat/completions`, {

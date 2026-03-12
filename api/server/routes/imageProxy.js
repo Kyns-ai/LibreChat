@@ -87,23 +87,22 @@ function parseImageRequest(messages, requestedModel) {
   const isPortrait = /portrait|vertical|tall/i.test(content);
   const isLandscape = /landscape|horizontal|wide/i.test(content);
 
-  // requestedModel from the model spec takes precedence; fall back to keyword detection
-  const validModels = new Set(['lustify', 'zimage']);
+  const validModels = new Set(['flux2klein', 'zimage']);
   const model = validModels.has(requestedModel) ? requestedModel
-    : /zimage|fast|rápido|rapido|quick/i.test(content) ? 'zimage'
-    : 'lustify';
+    : /zimage|fast|rápido|rapido|quick|turbo/i.test(content) ? 'zimage'
+    : 'flux2klein';
 
   const width = Math.round((isLandscape ? 1792 : 1024) / 8) * 8;
   const height = Math.round((isPortrait ? 1792 : 1024) / 8) * 8;
 
+  const isZimage = model === 'zimage';
   return {
     prompt: content,
     model,
     width,
     height,
-    steps: model === 'zimage' ? 8 : 30,
-    cfg_scale: 7,
-    negative_prompt: 'lowres, blurry, bad anatomy, worst quality, low quality',
+    steps: isZimage ? 9 : 4,
+    cfg_scale: isZimage ? 0.0 : 1.0,
   };
 }
 
@@ -190,7 +189,7 @@ async function imageRequestHandler(req, res) {
 
   const serverDomain = process.env.DOMAIN_SERVER || 'http://localhost:3080';
   const imageUrl = `${serverDomain}/images/generated/${filename}`;
-  const modelLabel = params.model === 'lustify' ? 'Lustify v7' : 'Z-Image Turbo';
+  const modelLabel = params.model === 'flux2klein' ? 'FLUX.2 Klein 9B' : 'Z-Image Turbo';
   const content = `![Imagem gerada](${imageUrl})\n\n_Gerada por KYNS Image · ${modelLabel} · ${params.width}×${params.height}px_`;
 
   return res.json(makeResponse(content));

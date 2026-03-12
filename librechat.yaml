@@ -174,20 +174,20 @@ modelSpecs:
           - If you add one, use exactly one short, specific question or one concrete optional offer.
           - Never end with a list of suggestions or a structured follow-up block.
           - Never use generic closers like "Espero ter ajudado", "Quer saber mais?", or "Posso ajudar com algo mais?".
-    - name: "kyns-image-lustify"
+    - name: "kyns-image-flux2klein"
       label: "KYNS Image"
-      description: "Lustify v7 — fotorrealista, detalhado, NSFW. Alta qualidade. ~60s por imagem. Limite: 10/dia."
+      description: "FLUX.2 Klein 9B — alta qualidade, 4 steps, fotorrealista. ~20s por imagem."
       iconURL: "https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-32.png"
       showIconInHeader: true
       showIconInMenu: true
       preset:
         endpoint: "KYNSImage"
-        model: "lustify"
+        model: "flux2klein"
         modelLabel: "KYNS Image"
-        greeting: "KYNS Image — Lustify v7. Fotorrealista, alta qualidade, NSFW. ~60 segundos. Descreva a imagem:"
+        greeting: "KYNS Image — FLUX.2 Klein 9B. Alta qualidade, fotorrealista. Descreva a imagem:"
     - name: "kyns-image-turbo"
       label: "KYNS Image Turbo"
-      description: "Z-Image Turbo — geração rápida em ~15s. Ótimo para testes e variações rápidas."
+      description: "Z-Image Turbo — geração ultra-rápida em ~5s. Qualidade fotorrealista."
       iconURL: "https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-32.png"
       showIconInHeader: true
       showIconInMenu: true
@@ -195,7 +195,7 @@ modelSpecs:
         endpoint: "KYNSImage"
         model: "zimage"
         modelLabel: "KYNS Image Turbo"
-        greeting: "KYNS Image Turbo — Z-Image Turbo. Rápido (~15s), ideal para protótipos. Para NSFW fotorrealista use KYNS Image. Descreva a imagem:"
+        greeting: "KYNS Image Turbo — Z-Image Turbo. Ultra-rápido (~5s), fotorrealista. Descreva a imagem:"
 
 
 endpoints:
@@ -269,7 +269,7 @@ endpoints:
       iconURL: "https://raw.githubusercontent.com/Kyns-ai/config/main/files/kyns-favicon-32.png"
       modelDisplayLabel: "KYNS Image"
       models:
-        default: ["lustify", "zimage"]
+        default: ["flux2klein", "zimage"]
       titleConvo: false
       summarize: false
       addParams:
