@@ -48,6 +48,7 @@ RUN \
     NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}" npm run frontend && \
     test -f /app/client/dist/index.html && \
     npm prune --production && \
+    npm install --no-save --legacy-peer-deps @opentelemetry/api @opentelemetry/core @opentelemetry/exporter-trace-otlp-http @opentelemetry/sdk-trace-base && \
     npm install @img/sharp-linuxmusl-x64@0.33.5 @img/sharp-libvips-linuxmusl-x64@1.0.4 --no-save --legacy-peer-deps && \
     npm cache clean --force
 
