@@ -69,12 +69,15 @@ class TTSService {
    * @returns {Promise<string>} The selected voice.
    */
   async getVoice(providerSchema, requestVoice) {
-    const voices = providerSchema.voices.filter((voice) => voice && voice.toUpperCase() !== 'ALL');
-    let voice = requestVoice;
-    if (!voice || !voices.includes(voice) || (voice.toUpperCase() === 'ALL' && voices.length > 1)) {
-      voice = getRandomVoiceId(voices);
+    const hasAll = providerSchema.voices.some((v) => v && v.toUpperCase() === 'ALL');
+    if (hasAll && requestVoice) {
+      return requestVoice;
     }
-    return voice;
+    const voices = providerSchema.voices.filter((v) => v && v.toUpperCase() !== 'ALL');
+    if (requestVoice && voices.includes(requestVoice)) {
+      return requestVoice;
+    }
+    return voices.length > 0 ? getRandomVoiceId(voices) : requestVoice || 'alloy';
   }
 
   /**

@@ -1,16 +1,39 @@
-const { TTSProviders } = require('librechat-data-provider');
+const axios = require('axios');
+const { logger } = require('@librechat/data-schemas');
+const { TTSProviders, extractEnvVariable } = require('librechat-data-provider');
 const { getAppConfig } = require('~/server/services/Config');
 const { getProvider } = require('./TTSService');
 
+const OPENAI_DEFAULT_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+
 /**
- * This function retrieves the available voices for the current TTS provider
- * It first fetches the TTS configuration and determines the provider
- * Then, based on the provider, it sends the corresponding voices as a JSON response
- *
- * @param {Object} req - The request object
- * @param {Object} res - The response object
- * @returns {Promise<void>}
- * @throws {Error} - If the provider is not 'openai' or 'elevenlabs', an error is thrown
+ * When the provider exposes a custom /voices endpoint (e.g. Chatterbox), query it
+ * and merge any uploaded custom voices with the OpenAI-compatible defaults.
+ * @param {string} baseUrl
+ * @param {string | undefined} apiKey
+ * @returns {Promise<string[]>}
+ */
+async function fetchRemoteVoices(baseUrl, apiKey) {
+  try {
+    const origin = new URL(baseUrl).origin;
+    const headers = {};
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+    const { data } = await axios.get(`${origin}/voices`, { headers, timeout: 5000 });
+    const remoteNames = (data?.voices ?? []).map((v) => v.name ?? v).filter(Boolean);
+    return [...new Set([...OPENAI_DEFAULT_VOICES, ...remoteNames])];
+  } catch {
+    return OPENAI_DEFAULT_VOICES;
+  }
+}
+
+/**
+ * Retrieves the available voices for the current TTS provider.
+ * When voices is configured as ['ALL'], resolves to real voice names from
+ * the provider, falling back to standard OpenAI voice identifiers.
+ * @param {Object} req
+ * @param {Object} res
  */
 async function getVoices(req, res) {
   try {
@@ -45,11 +68,22 @@ async function getVoices(req, res) {
         throw new Error('Invalid provider');
     }
 
-    const availableVoices = Array.isArray(voices)
-      ? [...new Set(voices.filter((voice) => voice && voice.toUpperCase() !== 'ALL'))]
-      : [];
+    const isAllOnly =
+      Array.isArray(voices) && voices.length === 1 && voices[0].toUpperCase() === 'ALL';
 
-    res.json(availableVoices);
+    if (isAllOnly) {
+      const providerSchema = ttsSchema[provider];
+      const url = providerSchema?.url;
+      const apiKey = providerSchema?.apiKey ? extractEnvVariable(providerSchema.apiKey) : undefined;
+      voices = url ? await fetchRemoteVoices(url, apiKey) : OPENAI_DEFAULT_VOICES;
+      logger.debug(`[getVoices] Resolved ALL to ${voices.length} voices from ${provider}`);
+    } else {
+      voices = Array.isArray(voices)
+        ? [...new Set(voices.filter((v) => v && v.toUpperCase() !== 'ALL'))]
+        : [];
+    }
+
+    res.json(voices);
   } catch (error) {
     res.status(500).json({ error: `Failed to get voices: ${error.message}` });
   }
