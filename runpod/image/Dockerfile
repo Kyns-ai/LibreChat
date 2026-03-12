@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -12,10 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /requirements.txt
 
 RUN pip install --no-cache-dir \
-    torch==2.3.1+cu121 torchvision==0.18.1+cu121 \
+    torch==2.5.1+cu121 torchvision==0.20.1+cu121 \
     --index-url https://download.pytorch.org/whl/cu121 \
     && pip install --no-cache-dir -r /requirements.txt \
-    && pip install --no-cache-dir git+https://github.com/huggingface/diffusers.git
+    && pip install --no-cache-dir git+https://github.com/huggingface/diffusers.git \
+    && pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation
 
 COPY handler.py /handler.py
 

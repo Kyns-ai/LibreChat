@@ -5,8 +5,9 @@ Supported models:
   - flux2klein: black-forest-labs/FLUX.2-klein-9B   (quality, 4 steps)
   - zimage:     Tongyi-MAI/Z-Image-Turbo            (speed, 9 steps)
 
-Both pipelines use BF16 and CPU offloading so they can coexist on a
-single 48 GB A40 without OOM.
+Z-Image lives fully on CUDA (~16 GB).
+FLUX.2 Klein uses CPU offloading (~29 GB peak during forward pass).
+Both use BF16 and Flash Attention for maximum quality.
 """
 
 import os
@@ -49,6 +50,27 @@ def _hf_kwargs() -> dict:
     return kwargs
 
 
+def _enable_flash_attention(pipe):
+    """Enable Flash Attention 2 on the transformer if available."""
+    transformer = getattr(pipe, "transformer", None)
+    if transformer is None:
+        return
+    setter = getattr(transformer, "set_attention_backend", None)
+    if setter is not None:
+        try:
+            setter("flash")
+            logger.info("Flash Attention enabled via set_attention_backend.")
+            return
+        except Exception as e:
+            logger.warning("set_attention_backend('flash') failed: %s", e)
+    try:
+        from diffusers.models.attention_processor import FlashAttnProcessor2
+        transformer.set_attn_processor(FlashAttnProcessor2())
+        logger.info("Flash Attention enabled via FlashAttnProcessor2.")
+    except Exception as e:
+        logger.warning("FlashAttnProcessor2 not available: %s — using default attention.", e)
+
+
 def load_flux2klein():
     logger.info("Loading FLUX.2 Klein 9B from %s …", FLUX2_HF_ID)
     try:
@@ -58,6 +80,7 @@ def load_flux2klein():
             **_hf_kwargs(),
         )
         pipe.enable_model_cpu_offload()
+        _enable_flash_attention(pipe)
         logger.info("FLUX.2 Klein 9B loaded (CPU offload).")
         return pipe
     except Exception as e:
@@ -73,8 +96,9 @@ def load_zimage():
             torch_dtype=torch.bfloat16,
             **_hf_kwargs(),
         )
-        pipe.enable_model_cpu_offload()
-        logger.info("Z-Image Turbo loaded (CPU offload).")
+        pipe.to("cuda")
+        _enable_flash_attention(pipe)
+        logger.info("Z-Image Turbo loaded on CUDA.")
         return pipe
     except Exception as e:
         logger.error("Failed to load Z-Image Turbo: %s", e)
