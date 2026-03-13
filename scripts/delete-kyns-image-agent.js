@@ -13,33 +13,27 @@ async function run() {
   await client.connect();
   console.log('Conectado!');
 
-  const col = client.db('LibreChat').collection('agents');
+  const db = client.db('LibreChat');
 
-  const all = await col
-    .find({}, { projection: { _id: 1, name: 1, author: 1, projectIds: 1 } })
-    .toArray();
+  const collections = await db.listCollections().toArray();
+  console.log('Coleções no banco:');
+  collections.forEach((c) => console.log(' -', c.name));
 
-  console.log(`Total de agentes no banco: ${all.length}`);
-  all.forEach((a) =>
-    console.log(`  _id=${a._id}  name="${a.name}"  projects=${JSON.stringify(a.projectIds)}`),
+  const agentCollections = collections.filter((c) =>
+    /agent|preset|character|assistant/i.test(c.name),
   );
+  console.log('\nColeções candidatas (agent/preset/character/assistant):');
 
-  const found = all.filter((a) => /kyns.?image|image.*kyns/i.test(a.name ?? ''));
-
-  if (found.length === 0) {
-    console.log('\nNenhum agente com nome "Kyns Image" encontrado pelo regex.');
-    console.log('Procurando por "image" (case-insensitive)...');
-    const imageAgents = all.filter((a) => /image/i.test(a.name ?? ''));
-    imageAgents.forEach((a) => console.log(`  CANDIDATO: _id=${a._id}  name="${a.name}"`));
-    await client.close();
-    return;
+  for (const colInfo of agentCollections) {
+    const col = db.collection(colInfo.name);
+    const docs = await col
+      .find({}, { projection: { _id: 1, name: 1, author: 1, projectIds: 1 } })
+      .toArray();
+    console.log(`\n[${colInfo.name}] — ${docs.length} doc(s):`);
+    docs.forEach((d) =>
+      console.log(`  _id=${d._id}  name="${d.name}"  projects=${JSON.stringify(d.projectIds)}`),
+    );
   }
-
-  console.log(`\nEncontrados ${found.length} agente(s) para deletar:`);
-  found.forEach((a) => console.log(`  _id=${a._id}  name="${a.name}"  author=${a.author}`));
-
-  const result = await col.deleteMany({ _id: { $in: found.map((a) => a._id) } });
-  console.log(`Deletados: ${result.deletedCount}`);
 
   await client.close();
   console.log('Concluído.');
