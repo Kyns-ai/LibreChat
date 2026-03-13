@@ -15,6 +15,8 @@ const POLL_TIMEOUT_MS = 300_000;
 const NO_WORKER_CANCEL_MS = 240_000;
 const IMAGE_DAILY_LIMIT = 10;
 const IMAGE_DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const RUNPOD_SUBMIT_TIMEOUT_MS = 30_000;
+const RUNPOD_POLL_REQUEST_TIMEOUT_MS = 20_000;
 const WATERMARK_TEXT = 'kyns.ai';
 
 const router = express.Router();
@@ -73,9 +75,13 @@ async function pollRunpodJob(endpointId, jobId, apiKey) {
   const start = Date.now();
   let firstWorkerSeen = false;
 
+  const pollAxiosConfig = {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    timeout: RUNPOD_POLL_REQUEST_TIMEOUT_MS,
+  };
   while (Date.now() - start < POLL_TIMEOUT_MS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    const resp = await axios.get(statusUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
+    const resp = await axios.get(statusUrl, pollAxiosConfig);
     const { status, output, error } = resp.data;
     if (status === 'COMPLETED') return output;
     if (status === 'FAILED' || error) throw new Error(`RunPod job failed: ${error || 'unknown'}`);
@@ -86,14 +92,14 @@ async function pollRunpodJob(endpointId, jobId, apiKey) {
       const elapsed = Date.now() - start;
       if (!firstWorkerSeen && elapsed > NO_WORKER_CANCEL_MS) {
         const health = await axios
-          .get(healthUrl, { headers: { Authorization: `Bearer ${apiKey}` } })
+          .get(healthUrl, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: RUNPOD_POLL_REQUEST_TIMEOUT_MS })
           .catch(() => ({ data: { workers: {} } }));
         const w = health.data?.workers ?? {};
         const hasWorkers =
           (w.idle ?? 0) + (w.initializing ?? 0) + (w.ready ?? 0) + (w.running ?? 0) > 0;
         if (!hasWorkers) {
           await axios
-            .post(cancelUrl, {}, { headers: { Authorization: `Bearer ${apiKey}` } })
+            .post(cancelUrl, {}, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10_000 })
             .catch(() => {});
           throw new Error(
             'Sem GPU disponível agora. O servidor de imagem está aquecendo — tente novamente em 1-2 minutos.',
@@ -103,7 +109,7 @@ async function pollRunpodJob(endpointId, jobId, apiKey) {
     }
   }
   await axios
-    .post(cancelUrl, {}, { headers: { Authorization: `Bearer ${apiKey}` } })
+    .post(cancelUrl, {}, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 10_000 })
     .catch(() => {});
   throw new Error('Timeout: geração de imagem demorou mais de 5 minutos.');
 }
@@ -189,12 +195,22 @@ async function imageRequestHandler(req, res) {
       const runResp = await axios.post(
         `https://api.runpod.ai/v2/${endpointId}/run`,
         { input: params },
-        { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' } },
+        {
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          timeout: RUNPOD_SUBMIT_TIMEOUT_MS,
+        },
       );
       jobId = runResp.data.id;
       logger.info(`[imageProxy] RunPod job submitted: ${jobId}`);
     } catch (err) {
-      logger.error('[imageProxy] Failed to submit RunPod job:', err?.response?.data ?? err.message);
+      const msg = err?.message ?? '';
+      logger.error('[imageProxy] Failed to submit RunPod job:', err?.response?.data ?? msg);
+      if (/timeout|ETIMEDOUT|ECONNABORTED/i.test(msg)) {
+        return res.json(makeResponse('O servidor de imagens demorou para responder. Tente novamente.'));
+      }
+      if (/ECONNREFUSED|ECONNRESET|Connection error/i.test(msg)) {
+        return res.json(makeResponse('Falha de conexão com o servidor de imagens. Tente novamente em alguns instantes.'));
+      }
       return res.json(makeResponse('Erro ao enviar requisição de imagem. Tente novamente.'));
     }
 

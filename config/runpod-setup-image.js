@@ -183,7 +183,13 @@ async function createEndpoint(volumeId) {
     { key: 'VOLUME_PATH', value: '/runpod-volume' },
     { key: 'HF_HOME', value: '/runpod-volume/hf-cache' },
     { key: 'TRANSFORMERS_CACHE', value: '/runpod-volume/hf-cache' },
+    {
+      key: 'LUSTIFY_HF_MODEL',
+      value: 'John6666/lustify-sdxl-nsfw-checkpoint-ggwp-v7-sdxl',
+    },
     { key: 'LUSTIFY_MODEL', value: 'lustifySDXLNSFW_ggwpV7.safetensors' },
+    { key: 'ZIMAGE_HF_MODEL', value: 'stabilityai/sdxl-turbo' },
+    { key: 'ZIMAGE_MODEL', value: 'sd_xl_turbo_1.0_fp16.safetensors' },
   ];
 
   if (CIVITAI_TOKEN) {

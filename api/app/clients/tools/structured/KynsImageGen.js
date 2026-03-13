@@ -3,11 +3,14 @@ const sharp = require('sharp');
 const { v4: uuidv4 } = require('uuid');
 const { Tool } = require('@langchain/core/tools');
 const { logger } = require('@librechat/data-schemas');
-const { FileContext } = require('librechat-data-provider');
+const { ContentTypes, FileContext } = require('librechat-data-provider');
 
 const DAILY_LIMIT = 10;
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 120_000;
+const RUNPOD_SUBMIT_TIMEOUT_MS = 30_000;
+const RUNPOD_POLL_REQUEST_TIMEOUT_MS = 15_000;
+const RUNPOD_SUBMIT_RETRIES = 2;
 
 const kynsImageSchema = {
   type: 'object',
@@ -94,11 +97,13 @@ async function countImagesGeneratedToday(userId) {
 async function pollRunpodJob(endpointId, jobId, apiKey) {
   const statusUrl = `https://api.runpod.ai/v2/${endpointId}/status/${jobId}`;
   const start = Date.now();
+  const axiosConfig = {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    timeout: RUNPOD_POLL_REQUEST_TIMEOUT_MS,
+  };
   while (Date.now() - start < POLL_TIMEOUT_MS) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    const resp = await axios.get(statusUrl, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
+    const resp = await axios.get(statusUrl, axiosConfig);
     const { status, output, error } = resp.data;
     if (status === 'COMPLETED') {
       return output;
@@ -163,6 +168,29 @@ class KynsImageGen extends Tool {
     return `![generated image](${serverDomain}${filepath})`;
   }
 
+  createAgentToolResult(imageBuffer, fileId) {
+    const dataUrl = `data:image/png;base64,${imageBuffer.toString('base64')}`;
+    const textResponse = [
+      {
+        type: ContentTypes.TEXT,
+        text: `${displayMessage}\n\ngenerated_image_id: "${fileId}"`,
+      },
+    ];
+
+    return [
+      textResponse,
+      {
+        content: [
+          {
+            type: ContentTypes.IMAGE_URL,
+            image_url: { url: dataUrl },
+          },
+        ],
+        file_ids: [fileId],
+      },
+    ];
+  }
+
   async _call(data) {
     const {
       prompt,
@@ -196,23 +224,45 @@ class KynsImageGen extends Tool {
     };
 
     let jobId;
-    try {
-      const runResp = await axios.post(
-        `https://api.runpod.ai/v2/${this.endpointId}/run`,
-        { input: jobInput },
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
+    let lastErr;
+    for (let attempt = 1; attempt <= RUNPOD_SUBMIT_RETRIES; attempt++) {
+      try {
+        const runResp = await axios.post(
+          `https://api.runpod.ai/v2/${this.endpointId}/run`,
+          { input: jobInput },
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: RUNPOD_SUBMIT_TIMEOUT_MS,
           },
-        },
-      );
-      jobId = runResp.data.id;
-    } catch (err) {
-      logger.error(
-        '[KynsImageGen] Failed to submit RunPod job:',
-        err?.response?.data ?? err.message,
-      );
+        );
+        jobId = runResp.data.id;
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        logger.error(
+          `[KynsImageGen] RunPod submit attempt ${attempt}/${RUNPOD_SUBMIT_RETRIES}:`,
+          err?.code ?? err?.message,
+          err?.response?.data ?? '',
+        );
+        if (attempt < RUNPOD_SUBMIT_RETRIES) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+    }
+    if (lastErr || !jobId) {
+      const msg = lastErr?.message ?? 'Unknown error';
+      const isTimeout = /timeout|ETIMEDOUT|ECONNABORTED/i.test(msg);
+      const isConn = /ECONNREFUSED|ECONNRESET|Connection error|terminated|fetch failed/i.test(msg);
+      if (isTimeout) {
+        return 'O servidor de imagens demorou para responder. Tente novamente em alguns instantes.';
+      }
+      if (isConn) {
+        return 'Falha de conexão com o servidor de imagens. Verifique se o endpoint RunPod está ativo e tente novamente.';
+      }
       return 'Erro ao enviar requisição de imagem. Tente novamente.';
     }
 
@@ -220,8 +270,15 @@ class KynsImageGen extends Tool {
     try {
       output = await pollRunpodJob(this.endpointId, jobId, this.apiKey);
     } catch (err) {
-      logger.error('[KynsImageGen] RunPod polling failed:', err.message);
-      return `Erro ao gerar imagem: ${err.message}`;
+      const msg = err?.message ?? '';
+      logger.error('[KynsImageGen] RunPod polling failed:', msg);
+      if (/timeout|timed out|ETIMEDOUT/i.test(msg)) {
+        return 'A geração da imagem demorou mais que o limite. Tente novamente ou use o modelo Turbo para respostas mais rápidas.';
+      }
+      if (/ECONNREFUSED|ECONNRESET|Connection error|fetch failed/i.test(msg)) {
+        return 'Falha de conexão com o servidor de imagens. Tente novamente em alguns instantes.';
+      }
+      return `Erro ao gerar imagem: ${msg}`;
     }
 
     const base64 = output?.image;
@@ -237,6 +294,10 @@ class KynsImageGen extends Tool {
       let imageBuffer = Buffer.from(base64, 'base64');
       imageBuffer = await addWatermark(imageBuffer);
 
+      if (this.returnMetadata) {
+        return this.createAgentToolResult(imageBuffer, file_id);
+      }
+
       const file = await this.uploadImageBuffer({
         req: { user: { id: this.userId } },
         context: FileContext.image_generation,
@@ -251,10 +312,6 @@ class KynsImageGen extends Tool {
           file_id,
         },
       });
-
-      if (this.returnMetadata) {
-        return file;
-      }
 
       return `${displayMessage}\n\n${this.wrapInMarkdown(file.filepath)}`;
     } catch (err) {

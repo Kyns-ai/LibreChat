@@ -1,5 +1,4 @@
 import { useCallback, useRef } from 'react';
-import { MicOff } from 'lucide-react';
 import { useToastContext, TooltipAnchor, ListeningIcon, Spinner } from '@librechat/client';
 import { useLocalize, useSpeechToText, useGetAudioSettings } from '~/hooks';
 import { useChatFormContext } from '~/Providers';
@@ -96,7 +95,7 @@ export default function AudioRecorder({
 
   const renderIcon = () => {
     if (isListening === true) {
-      return <MicOff className="stroke-red-500" />;
+      return <ListeningIcon className="stroke-green-500" />;
     }
     if (isLoading === true) {
       return <Spinner className="stroke-text-secondary" />;
@@ -116,6 +115,8 @@ export default function AudioRecorder({
           disabled={disabled}
           className={cn(
             'flex size-9 items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover',
+            isListening === true &&
+              'animate-pulse bg-green-500/10 text-green-600 hover:bg-green-500/15 dark:text-green-400',
           )}
           title={localize('com_ui_use_micrphone')}
           aria-pressed={isListening}

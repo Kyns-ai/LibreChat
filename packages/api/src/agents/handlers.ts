@@ -45,6 +45,56 @@ export interface ToolExecuteOptions {
   toolEndCallback?: ToolEndCallback;
 }
 
+function normalizeToolContent(result: unknown) {
+  if (result == null) {
+    return '';
+  }
+  if (typeof result === 'string') {
+    return result;
+  }
+  if (Array.isArray(result)) {
+    return result;
+  }
+  if (typeof result === 'object') {
+    try {
+      return JSON.stringify(result);
+    } catch {
+      return String(result);
+    }
+  }
+  return String(result);
+}
+
+function normalizeToolResult(result: unknown) {
+  if (
+    Array.isArray(result) &&
+    result.length === 2 &&
+    result[1] != null &&
+    typeof result[1] === 'object' &&
+    !Array.isArray(result[1])
+  ) {
+    return {
+      content: result[0] ?? '',
+      artifact: result[1],
+    };
+  }
+
+  if (result != null && typeof result === 'object' && !Array.isArray(result)) {
+    const maybeOutput = result as { content?: unknown; artifact?: unknown };
+    if ('content' in maybeOutput || 'artifact' in maybeOutput) {
+      return {
+        content: maybeOutput.content ?? '',
+        artifact: maybeOutput.artifact,
+      };
+    }
+  }
+
+  return {
+    content: normalizeToolContent(result),
+    artifact: undefined,
+  };
+}
+
 /**
  * Creates the ON_TOOL_EXECUTE handler for event-driven tool execution.
  * This handler receives batched tool calls, loads the required tools,
@@ -120,11 +170,12 @@ export function createToolExecuteHandler(options: ToolExecuteOptions): EventHand
                     }
                   }
 
-                  const result = await tool.invoke(tc.args, {
+                  const rawResult = await tool.invoke(tc.args, {
                     toolCall: toolCallConfig,
                     configurable: mergedConfigurable,
                     metadata,
                   } as Record<string, unknown>);
+                  const result = normalizeToolResult(rawResult);
 
                   if (toolEndCallback) {
                     await toolEndCallback(

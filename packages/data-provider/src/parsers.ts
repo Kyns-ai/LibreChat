@@ -516,6 +516,66 @@ const mergeExtractedSegments = (
   return mergedSegments;
 };
 
+const stripRegularContentFromThinkingSegments = (
+  segments: Array<TExtractedThinkingSegment>,
+  regularContent: string,
+): Array<TExtractedThinkingSegment> => {
+  const normalizedRegularContent = normalizeExtractedContent(regularContent);
+  if (!normalizedRegularContent) {
+    return segments;
+  }
+
+  let hasTrimmedDuplicate = false;
+
+  const dedupedSegments = segments
+    .map((segment, index, allSegments) => {
+      if (segment.type !== 'think') {
+        return segment;
+      }
+
+      const isLastThinkSegment =
+        allSegments.slice(index + 1).every((nextSegment) => nextSegment.type !== 'think');
+      if (!isLastThinkSegment) {
+        return segment;
+      }
+
+      const normalizedThinkingContent = normalizeExtractedContent(segment.content);
+      if (!normalizedThinkingContent) {
+        return null;
+      }
+
+      if (normalizedThinkingContent === normalizedRegularContent) {
+        hasTrimmedDuplicate = true;
+        return null;
+      }
+
+      if (normalizedThinkingContent.endsWith(normalizedRegularContent)) {
+        const trimmedContent = normalizeExtractedContent(
+          normalizedThinkingContent.slice(
+            0,
+            normalizedThinkingContent.length - normalizedRegularContent.length,
+          ),
+        );
+
+        if (!trimmedContent) {
+          hasTrimmedDuplicate = true;
+          return null;
+        }
+
+        hasTrimmedDuplicate = true;
+        return {
+          type: 'think' as const,
+          content: trimmedContent,
+        };
+      }
+
+      return segment;
+    })
+    .filter((segment): segment is TExtractedThinkingSegment => segment != null);
+
+  return hasTrimmedDuplicate ? mergeExtractedSegments(dedupedSegments) : segments;
+};
+
 export function extractThinkingContent(text: string): {
   thinkingContent: string;
   regularContent: string;
@@ -529,8 +589,27 @@ export function extractThinkingContent(text: string): {
     };
   }
 
+  const openThinkTag = '<think>';
+  const openThinkIdx = text.indexOf(openThinkTag);
   const closeThinkTag = '</think>';
   const closeThinkIdx = text.indexOf(closeThinkTag);
+  if (openThinkIdx !== -1 && closeThinkIdx === -1) {
+    const before = normalizeExtractedContent(text.slice(0, openThinkIdx));
+    const afterOpen = normalizeExtractedContent(text.slice(openThinkIdx + openThinkTag.length));
+    const segs: Array<TExtractedThinkingSegment> = [];
+    if (before) {
+      segs.push({ type: 'text', content: before });
+    }
+    if (afterOpen) {
+      segs.push({ type: 'think', content: afterOpen });
+    }
+    return {
+      thinkingContent: afterOpen,
+      regularContent: before,
+      segments: segs,
+    };
+  }
+
   if (closeThinkIdx !== -1 && !text.includes('<think>')) {
     const before = normalizeExtractedContent(text.slice(0, closeThinkIdx));
     const after = normalizeExtractedContent(text.slice(closeThinkIdx + closeThinkTag.length));
@@ -576,11 +655,6 @@ export function extractThinkingContent(text: string): {
   });
 
   const extractedSegments = mergeExtractedSegments(segments);
-  const thinkingContent = extractedSegments
-    .filter((segment) => segment.type === 'think')
-    .map((segment) => segment.content)
-    .join('\n\n')
-    .trim();
   const rawRegularContent = extractedSegments
     .filter((segment) => segment.type === 'text')
     .map((segment) => segment.content)
@@ -593,10 +667,17 @@ export function extractThinkingContent(text: string): {
     regularContent = normalizeExtractedContent(text);
   }
 
+  const dedupedSegments = stripRegularContentFromThinkingSegments(extractedSegments, regularContent);
+  const thinkingContent = dedupedSegments
+    .filter((segment) => segment.type === 'think')
+    .map((segment) => segment.content)
+    .join('\n\n')
+    .trim();
+
   return {
     thinkingContent,
     regularContent,
-    segments: extractedSegments,
+    segments: dedupedSegments,
   };
 }
 

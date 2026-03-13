@@ -150,6 +150,93 @@ Open source, actively developed, and built for anyone who values control over th
 
 ---
 
+## 🔧 Environment Variables
+
+Copy `.env.example` to `.env` and fill in the values. The full reference is available at [librechat.ai/docs/configuration/dotenv](https://www.librechat.ai/docs/configuration/dotenv).
+
+Below are the variables most relevant to the **KYNS.ai** deployment.
+
+### Server
+
+| Variable | Required | Description |
+|---|---|---|
+| `HOST` | Yes | Bind address (default: `localhost`) |
+| `PORT` | Yes | HTTP port (default: `3080`) |
+| `MONGO_URI` | Yes | MongoDB connection string |
+| `DOMAIN_CLIENT` | Yes | Public URL of the frontend |
+| `DOMAIN_SERVER` | Yes | Public URL of the backend |
+| `JWT_SECRET` | Yes | Secret used to sign access tokens |
+| `JWT_REFRESH_SECRET` | Yes | Secret used to sign refresh tokens |
+| `CREDS_KEY` | Yes | AES key for encrypting stored credentials |
+| `CREDS_IV` | Yes | AES IV for encrypting stored credentials |
+
+### Logging & Debug
+
+| Variable | Production value | Description |
+|---|---|---|
+| `DEBUG_LOGGING` | `false` | Verbose backend logging |
+| `DEBUG_CONSOLE` | `false` | Log HTTP requests to stdout |
+| `DEBUG_OPENAI` | `false` | Log raw OpenAI API requests/responses |
+| `CONSOLE_JSON` | `false` | Emit logs as JSON (for GCP/AWS log agents) |
+
+### Registration & Login
+
+| Variable | Value | Description |
+|---|---|---|
+| `ALLOW_EMAIL_LOGIN` | `true` | Allow login with email + password |
+| `ALLOW_REGISTRATION` | `true` | Allow new user registration |
+| `ALLOW_UNVERIFIED_EMAIL_LOGIN` | `true` | Skip email verification requirement |
+| `ALLOW_ACCOUNT_DELETION` | `true` | Let users delete their own accounts |
+| `ALLOW_SOCIAL_LOGIN` | `false` | Disable OAuth social login |
+| `ALLOW_PASSWORD_RESET` | `false` | Disable self-serve password reset |
+
+### Search
+
+| Variable | Value | Description |
+|---|---|---|
+| `SEARCH` | `false` | Disable MeiliSearch conversation search (KYNS uses SearXNG for web search instead) |
+
+### AI Endpoint (vLLM / RunPod)
+
+| Variable | Required | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | Yes | Set to `user_provided` or your vLLM key |
+| `RUNPOD_API_KEY` | Yes | RunPod API key for pod management scripts |
+| `RUNPOD_POD_ID` | No | Pod ID for stop-pod script (first running pod used if omitted) |
+
+### KYNS Image Generation
+
+| Variable | Required | Description |
+|---|---|---|
+| `RUNPOD_IMAGE_ENDPOINT_ID` | Yes | RunPod serverless endpoint ID for image generation |
+| `RUNPOD_IMAGE_API_KEY` | No | Separate API key for image endpoint (falls back to `RUNPOD_API_KEY`) |
+| `IMAGE_PROXY_KEY` | No | Internal Bearer token for the image proxy route (default: `kyns-image-internal`) |
+
+### KYNS TTS (Chatterbox)
+
+| Variable | Required | Description |
+|---|---|---|
+| `TTS_BASE_URL` | Yes | URL of the Chatterbox TTS service (e.g. `https://kyns-tts.up.railway.app`) |
+| `TTS_API_KEY` | No | API key for the TTS service if auth is enabled |
+
+### Web Search (SearXNG + Firecrawl)
+
+| Variable | Required | Description |
+|---|---|---|
+| `SEARXNG_INSTANCE_URL` | Yes | URL of the self-hosted SearXNG instance |
+| `SEARXNG_SECRET_KEY` | No | Secret key configured in the SearXNG container |
+| `FIRECRAWL_API_KEY` | No | API key for the Firecrawl scraper service |
+| `FIRECRAWL_API_URL` | No | Custom Firecrawl API URL (defaults to Firecrawl cloud) |
+
+### Redis
+
+| Variable | Required | Description |
+|---|---|---|
+| `USE_REDIS` | No | Enable Redis for caching and session storage |
+| `REDIS_URI` | No | Redis connection URI (e.g. `redis://127.0.0.1:6379`) |
+
+---
+
 ## 🌐 Resources
 
 **GitHub Repo:**

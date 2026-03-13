@@ -5,6 +5,7 @@ import {
   parseTextParts,
   extractDialogueForTTS,
   extractThinkingContent,
+  extractSuggestions,
 } from '../src/parsers';
 import { specialVariables } from '../src/config';
 import { EModelEndpoint } from '../src/schemas';
@@ -591,6 +592,30 @@ describe('parseTextParts', () => {
     expect(extracted.regularContent).toBe('437');
   });
 
+  test('should remove duplicated final answer from the end of a think block', () => {
+    const extracted = extractThinkingContent(
+      '<think>1. Analyze\n2. Decide\n\nResposta final</think>Resposta final',
+    );
+
+    expect(extracted.thinkingContent).toBe('1. Analyze\n2. Decide');
+    expect(extracted.regularContent).toBe('Resposta final');
+    expect(extracted.segments).toEqual([
+      { type: 'think', content: '1. Analyze\n2. Decide' },
+      { type: 'text', content: 'Resposta final' },
+    ]);
+  });
+
+  test('should hide incomplete think blocks while streaming', () => {
+    const extracted = extractThinkingContent('Resposta parcial <think>raciocínio ainda aberto');
+
+    expect(extracted.thinkingContent).toBe('raciocínio ainda aberto');
+    expect(extracted.regularContent).toBe('Resposta parcial');
+    expect(extracted.segments).toEqual([
+      { type: 'text', content: 'Resposta parcial' },
+      { type: 'think', content: 'raciocínio ainda aberto' },
+    ]);
+  });
+
   test('should include think parts by default', () => {
     const parts: TMessageContentParts[] = [
       { type: ContentTypes.TEXT, text: 'Answer:' },
@@ -685,5 +710,54 @@ describe('extractDialogueForTTS', () => {
     const text = '<think>private reasoning</think>*Ela se aproxima.* "Agora me escuta."';
 
     expect(extractDialogueForTTS(text)).toBe('Agora me escuta.');
+
+describe('extractSuggestions', () => {
+  test('returns original text unchanged when no suggestions block is present', () => {
+    const text = 'Uma resposta normal sem sugestões.';
+    const result = extractSuggestions(text);
+    expect(result.cleanText).toBe(text);
+    expect(result.suggestions).toEqual([]);
+  });
+
+  test('removes a suggestions block and returns its lines', () => {
+    const text =
+      'Resposta.\n[suggestions]\nComo aplicar isso?\nQual o risco?\nE o contrário?\n[/suggestions]';
+    const result = extractSuggestions(text);
+    expect(result.cleanText).toBe('Resposta.');
+    expect(result.suggestions).toEqual(['Como aplicar isso?', 'Qual o risco?', 'E o contrário?']);
+  });
+
+  test('trims whitespace from suggestion lines', () => {
+    const text = 'Texto.\n[suggestions]\n  Opção A  \n  Opção B  \n[/suggestions]';
+    const result = extractSuggestions(text);
+    expect(result.suggestions).toEqual(['Opção A', 'Opção B']);
+  });
+
+  test('caps suggestions at MAX_SUGGESTIONS (4)', () => {
+    const text =
+      'Texto.\n[suggestions]\nA\nB\nC\nD\nE\n[/suggestions]';
+    const result = extractSuggestions(text);
+    expect(result.suggestions).toHaveLength(4);
+    expect(result.suggestions).toEqual(['A', 'B', 'C', 'D']);
+  });
+
+  test('returns empty cleanText when entire message is a suggestions block', () => {
+    const text = '[suggestions]\nA\nB\n[/suggestions]';
+    const result = extractSuggestions(text);
+    expect(result.cleanText).toBe('');
+    expect(result.suggestions).toEqual(['A', 'B']);
+  });
+
+  test('handles empty string input', () => {
+    const result = extractSuggestions('');
+    expect(result.cleanText).toBe('');
+    expect(result.suggestions).toEqual([]);
+  });
+
+  test('handles text without closing tag gracefully (no match, returns as-is)', () => {
+    const text = 'Texto. [suggestions]\nOrfão sem fechar.';
+    const result = extractSuggestions(text);
+    expect(result.cleanText).toBe(text);
+    expect(result.suggestions).toEqual([]);
   });
 });
