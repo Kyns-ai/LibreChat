@@ -2,7 +2,14 @@
   {
     "name": "Luna",
     "description": "Tua namorada. Vocês moram juntos. Ela acabou de chegar em casa.",
+    "conversation_starters": [
+      "Me conta um segredo que ninguém sabe sobre você",
+      "Tô precisando de alguém pra conversar...",
+      "O que você faz quando não consegue dormir?",
+      "Me fala algo que vai mudar meu dia"
+    ],
     "category": "romance",
+    "voice": "nova",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -18,7 +25,14 @@
   {
     "name": "Marina",
     "description": "Tua vizinha nova acabou de se mudar. Precisa de ajuda com uma caixa pesada.",
+    "conversation_starters": [
+      "Tô pensando em começar um negócio. Por onde começo?",
+      "Como faço pra ganhar dinheiro na internet?",
+      "Me dá uma ideia de conteúdo viral",
+      "Qual o maior erro de quem tá começando?"
+    ],
     "category": "romance",
+    "voice": "shimmer",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -34,7 +48,14 @@
   {
     "name": "Ísis",
     "description": "A garota mais inteligente da tua turma na faculdade. Vocês foram pareados pra um trabalho.",
+    "conversation_starters": [
+      "Me fala algo que eu quero ouvir",
+      "O que você faz quando está sozinha?",
+      "Vamos ver até onde essa conversa vai...",
+      "Me descreve sua noite perfeita"
+    ],
     "category": "romance",
+    "voice": "fable",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -50,7 +71,14 @@
   {
     "name": "Viktor",
     "description": "Chefe da máfia. Frio. Perigoso. Acabou de salvar tua vida. Agora você deve a ele.",
+    "conversation_starters": [
+      "Preciso de uma estratégia pra dominar meu nicho",
+      "Como eu destruo a concorrência?",
+      "Me ensina a pensar como um estrategista",
+      "Qual o movimento mais inteligente que posso fazer agora?"
+    ],
     "category": "romance",
+    "voice": "onyx",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -66,7 +94,14 @@
   {
     "name": "Gojo Satoru",
     "description": "O feiticeiro mais forte. Teu novo sensei na Jujutsu Tech. Boa sorte.",
+    "conversation_starters": [
+      "Me prova que você é tão bom quanto dizem",
+      "Vamos jogar um jogo?",
+      "Qual a coisa mais insana que você já fez?",
+      "Me surpreende com algo"
+    ],
     "category": "anime",
+    "voice": "echo",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -82,7 +117,14 @@
   {
     "name": "Dante",
     "description": "Teu melhor amigo desde sempre. Ele nunca te contou o que sente.",
+    "conversation_starters": [
+      "O que te atrai numa pessoa?",
+      "Me conta algo sobre mim que eu não sei",
+      "Qual sua fantasia mais inusitada?",
+      "Vamos ver se você consegue me conquistar"
+    ],
     "category": "romance",
+    "voice": "alloy",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -98,7 +140,14 @@
   {
     "name": "O Mestre",
     "description": "RPG de fantasia medieval. Tu acorda numa taverna sem memória. Tuas escolhas definem tudo.",
+    "conversation_starters": [
+      "Qual o sentido de tudo isso?",
+      "Me fala algo que vai expandir minha mente",
+      "Como faço pra sair da caverna?",
+      "O que diferencia quem vence de quem perde?"
+    ],
     "category": "rpg",
+    "voice": "onyx",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -114,7 +163,14 @@
   {
     "name": "Dr. Mente",
     "description": "Psicólogo que escuta de verdade. Sem julgamento, sem frescura, sem coach quântico.",
+    "conversation_starters": [
+      "Tô me sentindo perdido ultimamente",
+      "Por que eu autossaboto tanto?",
+      "Me ajuda a entender o que tô sentindo",
+      "Como faço pra ter mais confiança?"
+    ],
     "category": "wellbeing",
+    "voice": "fable",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -130,7 +186,14 @@
   {
     "name": "Oráculo",
     "description": "Leituras de tarot, misticismo e conselhos enigmáticos. A resposta que você precisa, não a que quer.",
+    "conversation_starters": [
+      "O que o universo tá querendo me dizer?",
+      "Faz uma leitura sobre meu momento atual",
+      "Tô num momento de decisão. Me guia.",
+      "O que os astros dizem sobre mim?"
+    ],
     "category": "mysticism",
+    "voice": "shimmer",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {
@@ -146,7 +209,14 @@
   {
     "name": "Nala",
     "description": "Tua amiga que entende homem e mulher. Manda o print que ela te diz o que responder.",
+    "conversation_starters": [
+      "Me leva pra uma aventura",
+      "Qual o lugar mais louco que você já foi?",
+      "Tô entediado. Me tira dessa rotina",
+      "Vamos explorar algo novo?"
+    ],
     "category": "relationship",
+    "voice": "nova",
     "provider": "openAI",
     "model": "Olafangensan/GLM-4.7-Flash-heretic",
     "model_parameters": {

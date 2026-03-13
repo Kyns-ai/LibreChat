@@ -3,6 +3,7 @@ import {
   parseConvo,
   parseCompactConvo,
   parseTextParts,
+  extractDialogueForTTS,
   extractThinkingContent,
 } from '../src/parsers';
 import { specialVariables } from '../src/config';
@@ -13,22 +14,24 @@ import type { TUser, TConversation } from '../src/types';
 
 // Mock dayjs module with consistent date/time values regardless of environment
 jest.mock('dayjs', () => {
-  // Create a mock implementation that returns fixed values
   const mockDayjs = () => ({
     format: (format: string) => {
       if (format === 'YYYY-MM-DD') {
         return '2024-04-29';
       }
-      if (format === 'YYYY-MM-DD HH:mm:ss') {
-        return '2024-04-29 12:34:56';
+      if (format === 'YYYY-MM-DD HH:mm:ss Z') {
+        return '2024-04-29 12:34:56 -04:00';
       }
-      return format; // fallback
+      if (format === 'dddd') {
+        return 'Monday';
+      }
+      throw new Error(
+        `Unhandled dayjs().format() call in mock: "${format}". Update the mock in parsers.spec.ts`,
+      );
     },
-    day: () => 1, // 1 = Monday
     toISOString: () => '2024-04-29T16:34:56.000Z',
   });
 
-  // Add any static methods needed
   mockDayjs.extend = jest.fn();
 
   return mockDayjs;
@@ -53,13 +56,12 @@ describe('replaceSpecialVars', () => {
 
   test('should replace {{current_date}} with the current date', () => {
     const result = replaceSpecialVars({ text: 'Today is {{current_date}}' });
-    // dayjs().day() returns 1 for Monday (April 29, 2024 is a Monday)
-    expect(result).toBe('Today is 2024-04-29 (1)');
+    expect(result).toBe('Today is 2024-04-29 (Monday)');
   });
 
   test('should replace {{current_datetime}} with the current datetime', () => {
     const result = replaceSpecialVars({ text: 'Now is {{current_datetime}}' });
-    expect(result).toBe('Now is 2024-04-29 12:34:56 (1)');
+    expect(result).toBe('Now is 2024-04-29 12:34:56 -04:00 (Monday)');
   });
 
   test('should replace {{iso_datetime}} with the ISO datetime', () => {
@@ -96,7 +98,7 @@ describe('replaceSpecialVars', () => {
       user: mockUser,
     });
     expect(result).toBe(
-      'Hello Test User! Today is 2024-04-29 (1) and the time is 2024-04-29 12:34:56 (1). ISO: 2024-04-29T16:34:56.000Z',
+      'Hello Test User! Today is 2024-04-29 (Monday) and the time is 2024-04-29 12:34:56 -04:00 (Monday). ISO: 2024-04-29T16:34:56.000Z',
     );
   });
 
@@ -105,7 +107,7 @@ describe('replaceSpecialVars', () => {
       text: 'Date: {{CURRENT_DATE}}, User: {{Current_User}}',
       user: mockUser,
     });
-    expect(result).toBe('Date: 2024-04-29 (1), User: Test User');
+    expect(result).toBe('Date: 2024-04-29 (Monday), User: Test User');
   });
 
   test('should confirm all specialVariables from config.ts get parsed', () => {
@@ -126,8 +128,8 @@ describe('replaceSpecialVars', () => {
     });
 
     // Verify the expected replacements
-    expect(result).toContain('2024-04-29 (1)'); // current_date
-    expect(result).toContain('2024-04-29 12:34:56 (1)'); // current_datetime
+    expect(result).toContain('2024-04-29 (Monday)'); // current_date
+    expect(result).toContain('2024-04-29 12:34:56 -04:00 (Monday)'); // current_datetime
     expect(result).toContain('2024-04-29T16:34:56.000Z'); // iso_datetime
     expect(result).toContain('Test User'); // current_user
   });
@@ -571,6 +573,24 @@ describe('parseTextParts', () => {
     expect(extracted.regularContent).toBe('437');
   });
 
+  test('should extract markdown-emphasized thinking and final answer headings', () => {
+    const extracted = extractThinkingContent(
+      '**Thinking Process:**\n\n1. Analyze\n2. Decide\n\n**Final Answer:** 437',
+    );
+
+    expect(extracted.thinkingContent).toBe('1. Analyze\n2. Decide');
+    expect(extracted.regularContent).toBe('437');
+  });
+
+  test('should extract markdown heading thinking and final answer sections', () => {
+    const extracted = extractThinkingContent(
+      '### Thinking Process\n\n1. Analyze\n2. Decide\n\n## Final Answer\n437',
+    );
+
+    expect(extracted.thinkingContent).toBe('1. Analyze\n2. Decide');
+    expect(extracted.regularContent).toBe('437');
+  });
+
   test('should include think parts by default', () => {
     const parts: TMessageContentParts[] = [
       { type: ContentTypes.TEXT, text: 'Answer:' },
@@ -638,5 +658,32 @@ describe('parseTextParts', () => {
       { type: ContentTypes.TEXT, text: 'World' },
     ];
     expect(parseTextParts(parts)).toBe('Hello World');
+  });
+});
+
+describe('extractDialogueForTTS', () => {
+  test('should return only quoted speech when dialogue exists', () => {
+    const text =
+      '*Ela sorri de lado.* "Oi, amor." *Passa a mão no teu braço.* "Como foi teu dia?"';
+
+    expect(extractDialogueForTTS(text)).toBe('Oi, amor. Como foi teu dia?');
+  });
+
+  test('should support smart quotes', () => {
+    const text = '*Ela ri baixo.* “Vem cá.” *Te encara por um segundo.* “Eu tava com saudade.”';
+
+    expect(extractDialogueForTTS(text)).toBe('Vem cá. Eu tava com saudade.');
+  });
+
+  test('should fall back to sanitized text when no quoted speech exists', () => {
+    const text = '*Ela sorri de lado e senta na tua frente.*';
+
+    expect(extractDialogueForTTS(text)).toBe('');
+  });
+
+  test('should ignore thinking blocks before extracting dialogue', () => {
+    const text = '<think>private reasoning</think>*Ela se aproxima.* "Agora me escuta."';
+
+    expect(extractDialogueForTTS(text)).toBe('Agora me escuta.');
   });
 });

@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosError } from 'axios';
 import type { AxiosRequestConfig } from 'axios';
-import * as endpoints from './api-endpoints';
+import type { TextToSpeechResponse } from './types/files';
 import { setTokenHeader } from './headers-helpers';
+import * as endpoints from './api-endpoints';
 import type * as t from './types';
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
@@ -34,14 +35,21 @@ async function _postMultiPart(url: string, formData: FormData, options?: AxiosRe
   return response.data;
 }
 
-async function _postTTS(url: string, formData: FormData, options?: AxiosRequestConfig) {
+async function _postTTS(
+  url: string,
+  formData: FormData,
+  options?: AxiosRequestConfig,
+): Promise<TextToSpeechResponse> {
   const response = await axios.post(url, formData, {
     ...options,
     timeout: options?.timeout ?? TTS_REQUEST_TIMEOUT_MS,
     headers: { 'Content-Type': 'multipart/form-data' },
     responseType: 'arraybuffer',
   });
-  return response.data;
+  return {
+    audioData: response.data,
+    contentType: response.headers['content-type'] ?? 'audio/mpeg',
+  };
 }
 
 async function _put(url: string, data?: any) {
@@ -106,6 +114,15 @@ if (typeof window !== 'undefined') {
         return Promise.reject(error);
       }
 
+      /** Skip refresh when the Authorization header has been cleared (e.g. during logout),
+       *  but allow shared link requests to proceed so auth recovery/redirect can happen */
+      if (
+        !axios.defaults.headers.common['Authorization'] &&
+        !window.location.pathname.startsWith('/share/')
+      ) {
+        return Promise.reject(error);
+      }
+
       if (error.response.status === 401 && !originalRequest._retry) {
         console.warn('401 error, refreshing token');
         originalRequest._retry = true;
@@ -137,12 +154,9 @@ if (typeof window !== 'undefined') {
             dispatchTokenUpdatedEvent(token);
             processQueue(null, token);
             return await axios(originalRequest);
-          } else if (window.location.href.includes('share/')) {
-            console.log(
-              `Refresh token failed from shared link, attempting request to ${originalRequest.url}`,
-            );
           } else {
-            window.location.href = endpoints.loginPage();
+            processQueue(error, null);
+            window.location.href = endpoints.apiBaseUrl() + endpoints.buildLoginRedirectUrl();
           }
         } catch (err) {
           processQueue(err as AxiosError, null);

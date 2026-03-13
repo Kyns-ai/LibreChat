@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
+import { Navigate, createBrowserRouter, Outlet } from 'react-router-dom';
 import {
   Login,
   VerifyEmail,
@@ -12,6 +12,19 @@ import { MarketplaceProvider } from '~/components/Agents/MarketplaceContext';
 import AgentMarketplace from '~/components/Agents/Marketplace';
 import { OAuthSuccess, OAuthError } from '~/components/OAuth';
 import { AuthContextProvider } from '~/hooks/AuthContext';
+import {
+  SiteLayout,
+  SiteFAQPage,
+  SiteHomePage,
+  SiteAboutPage,
+  SiteTermsPage,
+  SiteContactPage,
+  SitePrivacyPage,
+  SitePhilosophyPage,
+  SiteTransparencyPage,
+  SiteContentPolicyPage,
+  SiteAcceptableUsePage,
+} from '~/site/pages';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import StartupLayout from './Layouts/Startup';
 import LoginLayout from './Layouts/Login';
@@ -30,9 +43,63 @@ const AuthLayout = () => (
 
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
+const MARKETING_HOSTS = new Set(['kyns.ai', 'www.kyns.ai']);
+const currentHostname = window.location.hostname.toLowerCase();
+const shouldServeMarketingSite = MARKETING_HOSTS.has(currentHostname);
 
 export const router = createBrowserRouter(
   [
+    ...(shouldServeMarketingSite
+      ? [
+          {
+            path: '/',
+            element: <SiteLayout />,
+            errorElement: <RouteErrorBoundary />,
+            children: [
+              {
+                index: true,
+                element: <SiteHomePage />,
+              },
+              {
+                path: 'about',
+                element: <SiteAboutPage />,
+              },
+              {
+                path: 'philosophy',
+                element: <SitePhilosophyPage />,
+              },
+              {
+                path: 'transparency',
+                element: <SiteTransparencyPage />,
+              },
+              {
+                path: 'faq',
+                element: <SiteFAQPage />,
+              },
+              {
+                path: 'terms',
+                element: <SiteTermsPage />,
+              },
+              {
+                path: 'privacy',
+                element: <SitePrivacyPage />,
+              },
+              {
+                path: 'content-policy',
+                element: <SiteContentPolicyPage />,
+              },
+              {
+                path: 'acceptable-use',
+                element: <SiteAcceptableUsePage />,
+              },
+              {
+                path: 'contact',
+                element: <SiteContactPage />,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       path: 'share/:shareId',
       element: <ShareRoute />,

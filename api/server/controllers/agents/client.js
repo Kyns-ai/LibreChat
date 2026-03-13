@@ -15,6 +15,8 @@ const {
   getBalanceConfig,
   omitTitleOptions,
   getProviderConfig,
+  loadWebSearchAuth,
+  isWebSearchSufficientlyAuthenticated,
   memoryInstructions,
   createTokenCounter,
   applyContextToAgent,
@@ -29,6 +31,7 @@ const {
   Callback,
   Providers,
   TitleMethod,
+  createSearchTool,
   formatMessage,
   formatAgentMessages,
   createMetadataAggregator,
@@ -36,6 +39,7 @@ const {
 const {
   Constants,
   Permissions,
+  Tools,
   VisionModes,
   ContentTypes,
   EModelEndpoint,
@@ -54,11 +58,14 @@ const BaseClient = require('~/app/clients/BaseClient');
 const { getRoleByName } = require('~/models/Role');
 const { loadAgent } = require('~/models/Agent');
 const { getMCPManager } = require('~/config');
+const { loadAuthValues } = require('~/server/services/Tools/credentials');
+const { prependKynsMasterPrompt, KynsResponseFilteredError } = require('~/server/services/safety/kynsPlatform');
 const db = require('~/models');
 
 const DEFAULT_AGENT_RECURSION_LIMIT = 16;
 const MEMORY_CONTEXT_TIMEOUT_MS = 1500;
 const SLOW_STAGE_THRESHOLD_MS = 200;
+const MANUAL_WEB_SEARCH_TOOL_ID = 'manual-web-search';
 
 function sanitizePayload(payload) {
   if (!Array.isArray(payload)) {
@@ -83,6 +90,67 @@ function sanitizePayload(payload) {
     result.push(msg);
   }
   return result;
+}
+
+function normalizeToolContent(result) {
+  if (result == null) {
+    return '';
+  }
+  if (typeof result === 'string') {
+    return result;
+  }
+  if (Array.isArray(result)) {
+    return result;
+  }
+  if (typeof result === 'object') {
+    try {
+      return JSON.stringify(result);
+    } catch {
+      return String(result);
+    }
+  }
+  return String(result);
+}
+
+function normalizeToolResult(result) {
+  if (
+    Array.isArray(result) &&
+    result.length === 2 &&
+    result[1] != null &&
+    typeof result[1] === 'object' &&
+    !Array.isArray(result[1])
+  ) {
+    return {
+      content: result[0] ?? '',
+      artifact: result[1],
+    };
+  }
+
+  if (result != null && typeof result === 'object' && !Array.isArray(result)) {
+    if ('content' in result || 'artifact' in result) {
+      return {
+        content: result.content ?? '',
+        artifact: result.artifact,
+      };
+    }
+  }
+
+  return {
+    content: normalizeToolContent(result),
+    artifact: undefined,
+  };
+}
+
+function appendTextToMessageContent(content, text) {
+  if (typeof content === 'string') {
+    return content.length ? `${content}\n\n${text}` : text;
+  }
+
+  if (Array.isArray(content)) {
+    return [...content, { type: ContentTypes.TEXT, text }];
+  }
+
+  return text;
 }
 
 class AgentClient extends BaseClient {
@@ -210,6 +278,28 @@ class AgentClient extends BaseClient {
   }
 
   async buildMessages(messages, parentMessageId, _buildOptions, opts) {
+    if (this.isKynsImageEndpoint()) {
+      const orderedMessages = this.constructor.getMessagesForConversation({
+        messages,
+        parentMessageId,
+      });
+
+      for (let i = 0; i < orderedMessages.length; i++) {
+        this.indexTokenCountMap[i] = orderedMessages[i].tokenCount ?? 0;
+      }
+
+      if (typeof opts?.getReqData === 'function') {
+        opts.getReqData({ promptTokens: 0 });
+      }
+
+      return {
+        prompt: [],
+        promptTokens: 0,
+        tokenCountMap: undefined,
+        messages: orderedMessages,
+      };
+    }
+
     /** Always pass mapMethod; getMessagesForConversation applies it only to messages with addedConvo flag */
     const orderedMessages = this.constructor.getMessagesForConversation({
       messages,
@@ -232,7 +322,8 @@ class AgentClient extends BaseClient {
         .filter(Boolean)
         .join('\n')
         .trim();
-      agent.instructions = baseInstructions;
+      agent.instructions = prependKynsMasterPrompt(baseInstructions);
+      agent.additional_instructions = '';
       return agent;
     };
 
@@ -598,6 +689,8 @@ class AgentClient extends BaseClient {
       messageId,
       streamId,
       conversationId,
+      agentId: this.options.agent.id,
+      agentName: this.options.agent.name,
       memoryMethods: {
         setMemory: db.setMemory,
         deleteMemory: db.deleteMemory,
@@ -681,8 +774,195 @@ class AgentClient extends BaseClient {
     }
   }
 
+  removeToolFromAgentConfig(toolName) {
+    if (!this.options.agent) {
+      return;
+    }
+
+    if (Array.isArray(this.options.agent.tools)) {
+      this.options.agent.tools = this.options.agent.tools.filter((tool) => tool !== toolName);
+    }
+
+    if (Array.isArray(this.options.agent.toolDefinitions)) {
+      this.options.agent.toolDefinitions = this.options.agent.toolDefinitions.filter(
+        (tool) => tool?.name !== toolName,
+      );
+    }
+
+    if (this.options.agent.toolRegistry instanceof Map) {
+      this.options.agent.toolRegistry.delete(toolName);
+    }
+
+    if (this.options.agent.toolContextMap?.[toolName] != null) {
+      delete this.options.agent.toolContextMap[toolName];
+    }
+  }
+
+  async prepareManualWebSearch(payload) {
+    const ephemeralAgent = this.options.req.body?.ephemeralAgent;
+    const webSearchConfig = this.options.req.config?.webSearch;
+    if (ephemeralAgent?.web_search !== true || !webSearchConfig || !Array.isArray(payload)) {
+      return payload;
+    }
+
+    try {
+      const auth = await loadWebSearchAuth({
+        userId: this.options.req.user.id,
+        webSearchConfig,
+        loadAuthValues,
+        throwError: false,
+      });
+
+      if (!isWebSearchSufficientlyAuthenticated(auth)) {
+        logger.warn('[prepareManualWebSearch] Web search auth insufficient, skipping');
+        return payload;
+      }
+
+      let targetIndex = -1;
+      for (let i = payload.length - 1; i >= 0; i--) {
+        if (payload[i]?.role === 'user') {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex === -1) {
+        return payload;
+      }
+
+      const targetMessage = payload[targetIndex];
+      const query =
+        typeof targetMessage?.content === 'string'
+          ? targetMessage.content
+          : targetMessage?.text ?? this.options.req.body?.text ?? '';
+
+      if (!query.trim()) {
+        return payload;
+      }
+
+      const searchTool = createSearchTool({
+        ...auth.authResult,
+        logger,
+      });
+      const rawResult = await searchTool.invoke({ query: query.trim() });
+      const { content, artifact } = normalizeToolResult(rawResult);
+      const normalizedContent =
+        typeof content === 'string'
+          ? content
+          : Array.isArray(content)
+            ? content
+                .map((part) => (part?.type === ContentTypes.TEXT ? part.text ?? '' : ''))
+                .filter(Boolean)
+                .join('\n')
+            : normalizeToolContent(content);
+
+      if (!normalizedContent.trim()) {
+        return payload;
+      }
+
+      const nextPayload = [...payload];
+      nextPayload[targetIndex] = {
+        ...targetMessage,
+        role: targetMessage?.role ?? 'user',
+        content: appendTextToMessageContent(
+          targetMessage?.content ?? targetMessage?.text ?? '',
+          `Web search context:\n${normalizedContent}`,
+        ),
+      };
+
+      const searchData = artifact?.[Tools.web_search];
+      if (searchData) {
+        this.artifactPromises.push(
+          Promise.resolve({
+            type: Tools.web_search,
+            messageId: this.responseMessageId,
+            toolCallId: MANUAL_WEB_SEARCH_TOOL_ID,
+            conversationId: this.conversationId,
+            [Tools.web_search]: searchData,
+          }),
+        );
+      }
+
+      this.removeToolFromAgentConfig(Tools.web_search);
+      return nextPayload.filter(Boolean);
+    } catch (err) {
+      logger.error('[prepareManualWebSearch] Web search failed, proceeding without search:', err);
+      return payload;
+    }
+  }
+
+  isKynsImageEndpoint() {
+    const endpoint = this.options.endpoint;
+    const agentEndpoint = this.options.agent?.endpoint;
+    const bodyEndpoint = this.options.req?.body?.endpoint;
+    const bodyEndpointOption = this.options.req?.body?.endpointOption?.endpoint;
+    return (
+      endpoint === 'KYNSImage' ||
+      agentEndpoint === 'KYNSImage' ||
+      bodyEndpoint === 'KYNSImage' ||
+      bodyEndpointOption === 'KYNSImage'
+    );
+  }
+
+  async executeKynsImageRequest() {
+    const body = this.options.req?.body ?? {};
+    const userText = body.text ?? '';
+    if (!userText.trim()) {
+      return 'Por favor, descreva a imagem que deseja gerar.';
+    }
+
+    const port = process.env.PORT || 3080;
+    const spec = this.options.spec ?? body.spec ?? '';
+    const model = spec.includes('turbo') ? 'zimage' : 'flux2klein';
+    const requestUserId = this.user ?? this.options.req?.user?.id;
+    logger.info(`[KYNSImage] spec=${spec} → model=${model}`);
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/image-proxy/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer kyns-image-internal',
+        'X-KYNS-User-ID': requestUserId != null ? String(requestUserId) : '',
+      },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: userText }],
+        model,
+      }),
+    });
+
+    if (!response.ok) {
+      logger.error(`[KYNSImage] imageProxy returned ${response.status}`);
+      return 'Erro ao gerar imagem. Tente novamente.';
+    }
+
+    const data = await response.json().catch(() => null);
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content === 'string' && content.length > 0) {
+      return content;
+    }
+
+    logger.error('[KYNSImage] Unexpected response from imageProxy:', data);
+    return 'Erro ao gerar imagem. Tente novamente.';
+  }
+
   /** @type {sendCompletion} */
   async sendCompletion(payload, opts = {}) {
+    if (this.isKynsImageEndpoint()) {
+      logger.info('[KYNSImage] Bypass activated — skipping agent pipeline');
+      try {
+        const imageContent = await this.executeKynsImageRequest();
+        this.contentParts.push({ type: ContentTypes.TEXT, text: imageContent });
+      } catch (err) {
+        logger.error('[KYNSImage] Error in executeKynsImageRequest:', err);
+        this.contentParts.push({
+          type: ContentTypes.ERROR,
+          [ContentTypes.ERROR]: `Erro ao gerar imagem: ${err?.message ?? 'erro desconhecido'}`,
+        });
+      }
+      const completion = filterMalformedContentParts(this.contentParts);
+      return { completion };
+    }
+
     await this.chatCompletion({
       payload,
       onProgress: opts.onProgress,
@@ -826,6 +1106,7 @@ class AgentClient extends BaseClient {
         version: 'v2',
       };
 
+      payload = await this.prepareManualWebSearch(payload);
       payload = sanitizePayload(payload);
       const toolSet = buildToolSet(this.options.agent);
       let { messages: initialMessages, indexTokenCountMap } = formatAgentMessages(
@@ -943,14 +1224,23 @@ class AgentClient extends BaseClient {
         });
       }
     } catch (err) {
-      logger.error(
-        '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
-        err,
-      );
-      if (err?.stack) {
+      if (err instanceof KynsResponseFilteredError) {
+        logger.warn('[AgentClient] Response blocked by KYNS safety filter', {
+          reason: err.reason,
+          userId: this.user ?? this.options.req.user?.id,
+          conversationId: this.conversationId,
+          messageId: this.responseMessageId,
+        });
+      } else {
+        logger.error(
+          '[api/server/controllers/agents/client.js #sendCompletion] Operation aborted',
+          err,
+        );
+      }
+      if (!(err instanceof KynsResponseFilteredError) && err?.stack) {
         logger.error('[sendCompletion] Stack trace:', err.stack);
       }
-      if (!abortController.signal.aborted) {
+      if (!(err instanceof KynsResponseFilteredError) && !abortController.signal.aborted) {
         logger.error(
           '[api/server/controllers/agents/client.js #sendCompletion] Unhandled error type',
           err,

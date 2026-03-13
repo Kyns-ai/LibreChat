@@ -69,12 +69,15 @@ class TTSService {
    * @returns {Promise<string>} The selected voice.
    */
   async getVoice(providerSchema, requestVoice) {
-    const voices = providerSchema.voices.filter((voice) => voice && voice.toUpperCase() !== 'ALL');
-    let voice = requestVoice;
-    if (!voice || !voices.includes(voice) || (voice.toUpperCase() === 'ALL' && voices.length > 1)) {
-      voice = getRandomVoiceId(voices);
+    const hasAll = providerSchema.voices.some((v) => v && v.toUpperCase() === 'ALL');
+    if (hasAll && requestVoice) {
+      return requestVoice;
     }
-    return voice;
+    const voices = providerSchema.voices.filter((v) => v && v.toUpperCase() !== 'ALL');
+    if (requestVoice && voices.includes(requestVoice)) {
+      return requestVoice;
+    }
+    return voices.length > 0 ? getRandomVoiceId(voices) : requestVoice || 'alloy';
   }
 
   /**
@@ -92,6 +95,14 @@ class TTSService {
         delete obj[key];
       }
     });
+  }
+
+  setResponseContentType(res, response) {
+    if (res.headersSent) {
+      return;
+    }
+
+    res.setHeader('Content-Type', response?.headers?.['content-type'] ?? 'audio/mpeg');
   }
 
   /**
@@ -299,13 +310,13 @@ class TTSService {
         role: req.user?.role,
       }));
     try {
-      res.setHeader('Content-Type', 'audio/mpeg');
       const provider = this.getProvider(appConfig);
       const ttsSchema = appConfig?.speech?.tts?.[provider];
       const voice = await this.getVoice(ttsSchema, requestVoice);
 
       if (input.length < 4096) {
         const response = await this.ttsRequest(provider, ttsSchema, { input, voice });
+        this.setResponseContentType(res, response);
         response.data.pipe(res);
         return;
       }
@@ -320,6 +331,7 @@ class TTSService {
             stream: true,
           });
 
+          this.setResponseContentType(res, response);
           logger.debug(`[textToSpeech] user: ${req?.user?.id} | writing audio stream`);
           await new Promise((resolve) => {
             response.data.pipe(res, { end: chunk.isFinished });
@@ -360,7 +372,6 @@ class TTSService {
    * @returns {Promise<void>}
    */
   async streamAudio(req, res) {
-    res.setHeader('Content-Type', 'audio/mpeg');
     const appConfig =
       req.config ??
       (await getAppConfig({
@@ -404,6 +415,7 @@ class TTSService {
               break;
             }
 
+            this.setResponseContentType(res, response);
             logger.debug(`[streamAudio] user: ${req?.user?.id} | writing audio stream`);
             await new Promise((resolve) => {
               response.data.pipe(res, { end: update.isFinished });

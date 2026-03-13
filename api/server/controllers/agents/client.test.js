@@ -1,5 +1,6 @@
 const { Providers } = require('@librechat/agents');
 const { Constants, EModelEndpoint } = require('librechat-data-provider');
+const { prependKynsMasterPrompt } = require('~/server/services/safety/kynsPlatform');
 const AgentClient = require('./client');
 
 jest.mock('@librechat/agents', () => ({
@@ -10,11 +11,22 @@ jest.mock('@librechat/agents', () => ({
   }),
 }));
 
+const mockLoadWebSearchAuth = jest.fn();
+const mockIsWebSearchSufficientlyAuthenticated = jest.fn();
+const mockCreateSearchTool = jest.fn();
+
 jest.mock('@librechat/api', () => ({
   ...jest.requireActual('@librechat/api'),
   checkAccess: jest.fn(),
   initializeAgent: jest.fn(),
   createMemoryProcessor: jest.fn(),
+  loadWebSearchAuth: (...args) => mockLoadWebSearchAuth(...args),
+  isWebSearchSufficientlyAuthenticated: (...args) => mockIsWebSearchSufficientlyAuthenticated(...args),
+}));
+
+jest.mock('@librechat/agents', () => ({
+  ...jest.requireActual('@librechat/agents'),
+  createSearchTool: (...args) => mockCreateSearchTool(...args),
 }));
 
 jest.mock('~/models/Agent', () => ({
@@ -1386,7 +1398,9 @@ describe('AgentClient - titleConvo', () => {
       });
 
       // Verify the instructions still work without MCP content (from agent config, not buildOptions)
-      expect(client.options.agent.instructions).toBe('Base agent instructions');
+      expect(client.options.agent.instructions).toBe(
+        prependKynsMasterPrompt('Base agent instructions'),
+      );
       expect(client.options.agent.instructions).not.toContain('[object Promise]');
     });
 
@@ -1995,7 +2009,9 @@ describe('AgentClient - titleConvo', () => {
         additional_instructions: null,
       });
 
-      expect(parallelAgent.instructions).toBe('Original parallel instructions');
+      expect(parallelAgent.instructions).toBe(
+        prependKynsMasterPrompt('Original parallel instructions'),
+      );
     });
 
     it('should handle parallel agents without existing instructions', async () => {
@@ -2269,5 +2285,170 @@ describe('AgentClient - titleConvo', () => {
       await expect(resultPromise).resolves.toBeUndefined();
       jest.useRealTimers();
     });
+  });
+});
+
+describe('AgentClient - prepareManualWebSearch', () => {
+  let client;
+  let mockReq;
+  let mockOptions;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockReq = {
+      user: { id: 'user-123' },
+      body: {
+        ephemeralAgent: { web_search: true },
+      },
+      config: {
+        webSearch: {
+          searchProvider: 'searxng',
+          searxngInstanceUrl: '${SEARXNG_INSTANCE_URL}',
+          safeSearch: 0,
+        },
+      },
+    };
+
+    mockOptions = {
+      req: mockReq,
+      res: {},
+      endpoint: 'openAI',
+      agent: {
+        id: 'agent-123',
+        provider: 'openAI',
+        model_parameters: { model: 'gpt-4' },
+        tools: ['web_search', 'execute_code'],
+        toolDefinitions: [{ name: 'web_search' }, { name: 'execute_code' }],
+        toolRegistry: new Map([['web_search', {}], ['execute_code', {}]]),
+        toolContextMap: { web_search: 'context' },
+      },
+    };
+  });
+
+  it('skips search and returns original payload when web_search flag is false', async () => {
+    mockReq.body.ephemeralAgent = { web_search: false };
+    client = new AgentClient(mockOptions);
+    const payload = [{ role: 'user', content: 'hello' }];
+
+    const result = await client.prepareManualWebSearch(payload);
+
+    expect(result).toBe(payload);
+    expect(mockLoadWebSearchAuth).not.toHaveBeenCalled();
+  });
+
+  it('skips search when auth is insufficient (no searchProvider)', async () => {
+    const fakeAuth = { authenticated: false, authResult: {}, authTypes: [] };
+    mockLoadWebSearchAuth.mockResolvedValue(fakeAuth);
+    mockIsWebSearchSufficientlyAuthenticated.mockReturnValue(false);
+
+    client = new AgentClient(mockOptions);
+    const payload = [{ role: 'user', content: 'what is the weather today?' }];
+
+    const result = await client.prepareManualWebSearch(payload);
+
+    expect(result).toBe(payload);
+    expect(mockCreateSearchTool).not.toHaveBeenCalled();
+  });
+
+  it('executes search and enriches payload when searchProvider is authenticated (no reranker)', async () => {
+    const fakeAuth = {
+      authenticated: false,
+      authResult: { searchProvider: 'searxng', searxngInstanceUrl: 'https://searxng.example.com' },
+      authTypes: [],
+    };
+    mockLoadWebSearchAuth.mockResolvedValue(fakeAuth);
+    mockIsWebSearchSufficientlyAuthenticated.mockReturnValue(true);
+
+    const mockInvoke = jest.fn().mockResolvedValue('Search result content');
+    mockCreateSearchTool.mockReturnValue({ invoke: mockInvoke });
+
+    client = new AgentClient(mockOptions);
+    client.responseMessageId = 'resp-123';
+    client.conversationId = 'convo-123';
+
+    const payload = [{ role: 'user', content: 'latest news about AI' }];
+    const result = await client.prepareManualWebSearch(payload);
+
+    expect(mockIsWebSearchSufficientlyAuthenticated).toHaveBeenCalledWith(fakeAuth);
+    expect(mockCreateSearchTool).toHaveBeenCalled();
+    expect(mockInvoke).toHaveBeenCalledWith({ query: 'latest news about AI' });
+    expect(result).not.toBe(payload);
+    expect(result[0].content).toContain('Web search context:');
+    expect(result[0].content).toContain('Search result content');
+  });
+
+  it('removes web_search tool from agent config after successful search', async () => {
+    const fakeAuth = {
+      authenticated: false,
+      authResult: { searchProvider: 'searxng', searxngInstanceUrl: 'https://searxng.example.com' },
+      authTypes: [],
+    };
+    mockLoadWebSearchAuth.mockResolvedValue(fakeAuth);
+    mockIsWebSearchSufficientlyAuthenticated.mockReturnValue(true);
+
+    const mockInvoke = jest.fn().mockResolvedValue('Search results here');
+    mockCreateSearchTool.mockReturnValue({ invoke: mockInvoke });
+
+    client = new AgentClient(mockOptions);
+    client.responseMessageId = 'resp-123';
+    client.conversationId = 'convo-123';
+
+    const payload = [{ role: 'user', content: 'who won the world cup?' }];
+    await client.prepareManualWebSearch(payload);
+
+    expect(client.options.agent.tools).not.toContain('web_search');
+    expect(client.options.agent.toolDefinitions.find((t) => t.name === 'web_search')).toBeUndefined();
+    expect(client.options.agent.toolRegistry.has('web_search')).toBe(false);
+    expect(client.options.agent.toolContextMap).not.toHaveProperty('web_search');
+  });
+
+  it('returns original payload unchanged when search result is empty', async () => {
+    const fakeAuth = {
+      authenticated: false,
+      authResult: { searchProvider: 'searxng', searxngInstanceUrl: 'https://searxng.example.com' },
+      authTypes: [],
+    };
+    mockLoadWebSearchAuth.mockResolvedValue(fakeAuth);
+    mockIsWebSearchSufficientlyAuthenticated.mockReturnValue(true);
+
+    mockCreateSearchTool.mockReturnValue({ invoke: jest.fn().mockResolvedValue('') });
+
+    client = new AgentClient(mockOptions);
+    client.responseMessageId = 'resp-123';
+    client.conversationId = 'convo-123';
+
+    const payload = [{ role: 'user', content: 'some question' }];
+    const result = await client.prepareManualWebSearch(payload);
+
+    expect(result).toBe(payload);
+  });
+
+  it('proceeds with search even when reranker is not configured (scraper/reranker optional)', async () => {
+    const fakeAuthNoReranker = {
+      authenticated: false,
+      authResult: {
+        searchProvider: 'searxng',
+        searxngInstanceUrl: 'https://searxng.example.com',
+        scraperProvider: 'firecrawl',
+        firecrawlApiKey: 'key',
+      },
+      authTypes: [['providers', 'system_defined'], ['scrapers', 'system_defined'], ['rerankers', 'user_provided']],
+    };
+    mockLoadWebSearchAuth.mockResolvedValue(fakeAuthNoReranker);
+    mockIsWebSearchSufficientlyAuthenticated.mockReturnValue(true);
+
+    const mockInvoke = jest.fn().mockResolvedValue('Scraped content without reranker');
+    mockCreateSearchTool.mockReturnValue({ invoke: mockInvoke });
+
+    client = new AgentClient(mockOptions);
+    client.responseMessageId = 'resp-123';
+    client.conversationId = 'convo-123';
+
+    const payload = [{ role: 'user', content: 'test query' }];
+    const result = await client.prepareManualWebSearch(payload);
+
+    expect(result[0].content).toContain('Web search context:');
+    expect(result[0].content).toContain('Scraped content without reranker');
   });
 });

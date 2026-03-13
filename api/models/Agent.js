@@ -45,6 +45,8 @@ const extractMCPServerNames = (tools) => {
   return Array.from(serverNames);
 };
 
+const getEffectiveProviderEndpoint = (endpoint) => (endpoint === 'KYNSDeep' ? 'KYNS' : endpoint);
+
 /**
  * Create an agent with the provided data.
  * @param {Object} agentData - The agent data to create.
@@ -169,7 +171,7 @@ const loadEphemeralAgent = async ({ req, spec, endpoint, model_parameters: _m })
   const result = {
     id: ephemeralId,
     instructions,
-    provider: endpoint,
+    provider: getEffectiveProviderEndpoint(endpoint),
     model_parameters,
     model,
     tools,
@@ -718,6 +720,8 @@ const getListAgentsByAccess = async ({
     support_contact: 1,
     is_promoted: 1,
     greeting: 1,
+    conversation_starters: 1,
+    voice: 1,
   }).sort({ updatedAt: -1, _id: 1 });
 
   // Only apply limit if pagination is requested

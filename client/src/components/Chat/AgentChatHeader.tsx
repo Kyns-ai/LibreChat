@@ -48,7 +48,7 @@ const AgentChatHeader: React.FC<AgentChatHeaderProps> = ({ conversation }) => {
             </div>
           </button>
         </OGDialogTrigger>
-        <CallButton />
+        <CallButton hasVoice={!!agent?.voice} />
       </div>
       <AgentDetailContent agent={agent} hideStartChat />
     </OGDialog>

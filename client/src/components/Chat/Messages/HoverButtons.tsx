@@ -18,7 +18,7 @@ type THoverButtons = {
   message: TMessage;
   regenerate: () => void;
   handleContinue: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  latestMessage: TMessage | null;
+  latestMessageId?: string;
   isLast: boolean;
   index: number;
   handleFeedback?: ({ feedback }: { feedback: TFeedback | undefined }) => void;
@@ -39,37 +39,6 @@ type HoverButtonProps = {
   buttonStyle?: string;
 };
 
-const extractMessageContent = (message: TMessage): string => {
-  if (typeof message.content === 'string') {
-    return message.content;
-  }
-
-  if (Array.isArray(message.content)) {
-    return message.content
-      .map((part) => {
-        if (part == null) {
-          return '';
-        }
-        if (typeof part === 'string') {
-          return part;
-        }
-        if ('text' in part) {
-          return part.text || '';
-        }
-        if ('think' in part) {
-          const think = part.think;
-          if (typeof think === 'string') {
-            return think;
-          }
-          return think && 'text' in think ? think.text || '' : '';
-        }
-        return '';
-      })
-      .join('');
-  }
-
-  return message.text || '';
-};
 
 const HoverButton = memo(
   ({
@@ -121,7 +90,7 @@ const HoverButtons = ({
   message,
   regenerate,
   handleContinue,
-  latestMessage,
+  latestMessageId,
   isLast,
   handleFeedback,
   agentVoice,
@@ -146,7 +115,7 @@ const HoverButtons = ({
     searchResult: message.searchResult,
     finish_reason: message.finish_reason,
     isCreatedByUser: message.isCreatedByUser,
-    latestMessageId: latestMessage?.messageId,
+    latestMessageId: latestMessageId,
   });
 
   const {
@@ -195,7 +164,7 @@ const HoverButtons = ({
           index={index}
           isLast={isLast}
           messageId={message.messageId}
-          content={extractMessageContent(message)}
+          content={message.content ?? message.text ?? ''}
           agentVoice={agentVoice}
           renderButton={(props) => (
             <HoverButton
@@ -243,7 +212,7 @@ const HoverButtons = ({
         messageId={message.messageId}
         conversationId={conversation.conversationId}
         forkingSupported={forkingSupported}
-        latestMessageId={latestMessage?.messageId}
+        latestMessageId={latestMessageId}
         isLast={isLast}
       />
 

@@ -1,11 +1,12 @@
-# v0.8.3-rc1
+# v0.8.3
 
 # Base node image
 FROM node:20-alpine AS node
 
-# Install jemalloc
-RUN apk add --no-cache jemalloc su-exec
+# Install runtime libraries and fonts used by sharp/libvips SVG text rendering
+RUN apk add --no-cache jemalloc su-exec fontconfig ttf-dejavu
 RUN apk add --no-cache python3 py3-pip uv
+RUN fc-cache -f
 
 # Set environment variable to use jemalloc
 ENV LD_PRELOAD=/usr/lib/libjemalloc.so.2
@@ -37,7 +38,9 @@ RUN \
     npm config set fetch-retry-maxtimeout 600000 ; \
     npm config set fetch-retries 5 ; \
     npm config set fetch-retry-mintimeout 15000 ; \
-    npm ci --no-audit
+    npm ci --no-audit --legacy-peer-deps ; \
+    # Work around npm optional dependency resolution on Alpine for Rollup
+    npm install --no-save @rollup/rollup-linux-x64-musl --legacy-peer-deps
 
 COPY --chown=node:node . .
 
@@ -46,6 +49,8 @@ RUN \
     NODE_OPTIONS="--max-old-space-size=${NODE_MAX_OLD_SPACE_SIZE}" npm run frontend && \
     test -f /app/client/dist/index.html && \
     npm prune --production && \
+    npm install --no-save --legacy-peer-deps @opentelemetry/api @opentelemetry/core @opentelemetry/exporter-trace-otlp-http @opentelemetry/sdk-trace-base && \
+    npm install @img/sharp-linuxmusl-x64@0.33.5 @img/sharp-libvips-linuxmusl-x64@1.0.4 --no-save --legacy-peer-deps && \
     npm cache clean --force
 
 # Node API setup

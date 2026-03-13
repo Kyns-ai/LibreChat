@@ -1,42 +1,23 @@
 """
 RunPod Serverless handler for KYNS image generation.
 
-Models are loaded from HuggingFace Hub (preferred) or from a direct URL.
-If a network volume is attached, models are cached there across restarts.
+Supported models:
+  - flux2klein: black-forest-labs/FLUX.2-klein-9B   (quality, 4 steps)
+  - zimage:     Tongyi-MAI/Z-Image-Turbo            (speed, 9 steps)
 
-Primary models (HuggingFace Hub, no auth needed):
-  - lustify: RunDiffusion/Juggernaut-XL-v9  (photorealistic, NSFW-capable)
-  - zimage:  stabilityai/sdxl-turbo          (fast, 4 steps)
-
-Override with env vars:
-  LUSTIFY_HF_MODEL  (default: RunDiffusion/Juggernaut-XL-v9)
-  ZIMAGE_HF_MODEL   (default: stabilityai/sdxl-turbo)
-  LUSTIFY_MODEL_URL / ZIMAGE_MODEL_URL  (direct .safetensors URL as fallback)
-  CIVITAI_TOKEN     (for CivitAI download auth, used when URL contains civitai.com)
-  HF_TOKEN          (HuggingFace token for gated models)
-
-Input:
-  {
-    "prompt": "...",
-    "model": "lustify" | "zimage",
-    "width": 1024, "height": 1024,
-    "steps": 30, "cfg_scale": 7.0,
-    "negative_prompt": "..."
-  }
-
-Output:
-  {"image": "<base64 PNG>"}
+Z-Image lives fully on CUDA (~16 GB).
+FLUX.2 Klein uses CPU offloading (~29 GB peak during forward pass).
+Both use BF16 and Flash Attention for maximum quality.
 """
 
 import os
 import io
 import base64
 import logging
-import urllib.request
 
 import torch
 import runpod
-from diffusers import StableDiffusionXLPipeline, AutoPipelineForText2Image
+from diffusers import Flux2KleinPipeline, ZImagePipeline
 from PIL import Image
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -44,136 +25,87 @@ logger = logging.getLogger("kyns-image")
 
 VOLUME_PATH = os.getenv("VOLUME_PATH", "/runpod-volume")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-CIVITAI_TOKEN = os.getenv("CIVITAI_TOKEN", "")
 
-LUSTIFY_HF_MODEL = os.getenv("LUSTIFY_HF_MODEL", "RunDiffusion/Juggernaut-XL-v9")
-ZIMAGE_HF_MODEL  = os.getenv("ZIMAGE_HF_MODEL",  "stabilityai/sdxl-turbo")
+FLUX2_HF_ID = "black-forest-labs/FLUX.2-klein-9B"
+ZIMAGE_HF_ID = "Tongyi-MAI/Z-Image-Turbo"
 
-LUSTIFY_MODEL_URL = os.getenv("LUSTIFY_MODEL_URL", "")
-ZIMAGE_MODEL_URL  = os.getenv("ZIMAGE_MODEL_URL",  "")
-
-# Legacy safetensors filenames (used only when MODEL_URL is a direct file URL)
-LUSTIFY_MODEL = os.getenv("LUSTIFY_MODEL", "lustify_model.safetensors")
-ZIMAGE_MODEL  = os.getenv("ZIMAGE_MODEL",  "zimage_model.safetensors")
+MODEL_DEFAULTS = {
+    "flux2klein": {"steps": 4, "guidance_scale": 3.5},
+    "zimage": {"steps": 9, "guidance_scale": 0.0},
+}
 
 pipes: dict = {}
 
 
-def _download_url(url: str, dest: str) -> bool:
-    if not url:
-        return False
-    resolved_url = url
-    if CIVITAI_TOKEN and "civitai.com" in url:
-        sep = "&" if "?" in url else "?"
-        resolved_url = f"{url}{sep}token={CIVITAI_TOKEN}"
-    logger.info("Downloading from %s → %s ...", resolved_url.split("?")[0], dest)
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
+def _cache_dir() -> str:
+    path = os.path.join(VOLUME_PATH, "hf-cache")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _hf_kwargs() -> dict:
+    kwargs: dict = {"cache_dir": _cache_dir()}
+    if HF_TOKEN:
+        kwargs["token"] = HF_TOKEN
+    return kwargs
+
+
+def load_flux2klein():
+    logger.info("Loading FLUX.2 Klein 9B from %s …", FLUX2_HF_ID)
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; kyns-image-worker/2.0)"}
-        if HF_TOKEN and "huggingface.co" in resolved_url:
-            headers["Authorization"] = f"Bearer {HF_TOKEN}"
-        req = urllib.request.Request(resolved_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=1800) as resp, open(dest, "wb") as f:
-            downloaded = 0
-            while chunk := resp.read(8 * 1024 * 1024):
-                f.write(chunk)
-                downloaded += len(chunk)
-                if downloaded % (500 * 1024 * 1024) < 8 * 1024 * 1024:
-                    logger.info("  Downloaded %.1f MB ...", downloaded / 1e6)
-        logger.info("Download complete: %.1f MB", os.path.getsize(dest) / 1e6)
-        return True
-    except Exception as e:
-        logger.error("Download failed: %s", e)
-        if os.path.exists(dest):
-            os.remove(dest)
-        return False
-
-
-def _load_from_hf(model_key: str, hf_model_id: str) -> "StableDiffusionXLPipeline | None":
-    cache_dir = os.path.join(VOLUME_PATH, "hf-cache")
-    os.makedirs(cache_dir, exist_ok=True)
-    logger.info("Loading %s from HuggingFace: %s (cache: %s)", model_key, hf_model_id, cache_dir)
-    try:
-        kwargs = {
-            "torch_dtype": torch.float16,
-            "use_safetensors": True,
-            "cache_dir": cache_dir,
-            "variant": "fp16",
-        }
-        if HF_TOKEN:
-            kwargs["token"] = HF_TOKEN
-        try:
-            pipe = AutoPipelineForText2Image.from_pretrained(hf_model_id, **kwargs)
-        except Exception:
-            del kwargs["variant"]
-            pipe = AutoPipelineForText2Image.from_pretrained(hf_model_id, **kwargs)
-        pipe = pipe.to("cuda")
-        try:
-            pipe.enable_xformers_memory_efficient_attention()
-        except Exception:
-            pipe.enable_attention_slicing()
-        logger.info("Model %s loaded from HuggingFace successfully.", model_key)
-        return pipe
-    except Exception as e:
-        logger.error("Failed to load %s from HuggingFace: %s", model_key, e)
-        return None
-
-
-def _load_from_file(model_key: str, filename: str, download_url: str) -> "StableDiffusionXLPipeline | None":
-    path = os.path.join(VOLUME_PATH, filename)
-    if not os.path.exists(path):
-        logger.warning("Model file not found: %s", path)
-        if not download_url:
-            return None
-        if not _download_url(download_url, path):
-            return None
-    logger.info("Loading %s from file: %s", model_key, path)
-    try:
-        pipe = StableDiffusionXLPipeline.from_single_file(
-            path,
-            torch_dtype=torch.float16,
-            use_safetensors=True,
+        pipe = Flux2KleinPipeline.from_pretrained(
+            FLUX2_HF_ID,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=False,
+            **_hf_kwargs(),
         )
-        pipe = pipe.to("cuda")
-        try:
-            pipe.enable_xformers_memory_efficient_attention()
-        except Exception:
-            pipe.enable_attention_slicing()
-        logger.info("Model %s loaded from file successfully.", model_key)
+        pipe.to("cuda")
+        logger.info("FLUX.2 Klein 9B loaded on CUDA.")
         return pipe
     except Exception as e:
-        logger.error("Failed to load %s from file: %s", model_key, e)
+        logger.error("Failed to load FLUX.2 Klein 9B: %s", e)
         return None
 
 
-def load_model(model_key: str, hf_model_id: str, filename: str, download_url: str) -> "StableDiffusionXLPipeline | None":
-    # Try file first (faster if already downloaded)
-    path = os.path.join(VOLUME_PATH, filename)
-    if os.path.exists(path):
-        pipe = _load_from_file(model_key, filename, "")
-        if pipe:
-            return pipe
-
-    # Try HuggingFace Hub (no IP restrictions, caches to volume)
-    pipe = _load_from_hf(model_key, hf_model_id)
-    if pipe:
+def load_zimage():
+    logger.info("Loading Z-Image Turbo from %s …", ZIMAGE_HF_ID)
+    try:
+        pipe = ZImagePipeline.from_pretrained(
+            ZIMAGE_HF_ID,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=False,
+            **_hf_kwargs(),
+        )
+        pipe.to("cuda")
+        logger.info("Z-Image Turbo loaded on CUDA.")
         return pipe
-
-    # Fallback: download from direct URL (CivitAI or other)
-    if download_url:
-        return _load_from_file(model_key, filename, download_url)
-
-    return None
+    except Exception as e:
+        logger.error("Failed to load Z-Image Turbo: %s", e)
+        return None
 
 
 def preload():
-    p = load_model("lustify", LUSTIFY_HF_MODEL, LUSTIFY_MODEL, LUSTIFY_MODEL_URL)
-    if p:
-        pipes["lustify"] = p
-
-    p = load_model("zimage", ZIMAGE_HF_MODEL, ZIMAGE_MODEL, ZIMAGE_MODEL_URL)
+    p = load_zimage()
     if p:
         pipes["zimage"] = p
+
+    p = load_flux2klein()
+    if p:
+        pipes["flux2klein"] = p
+    elif FLUX2_HF_ID:
+        logger.warning("FLUX.2 Klein failed on CUDA, retrying with CPU offload…")
+        try:
+            pipe = Flux2KleinPipeline.from_pretrained(
+                FLUX2_HF_ID,
+                torch_dtype=torch.bfloat16,
+                low_cpu_mem_usage=False,
+                **_hf_kwargs(),
+            )
+            pipe.enable_model_cpu_offload()
+            pipes["flux2klein"] = pipe
+            logger.info("FLUX.2 Klein 9B loaded (CPU offload fallback).")
+        except Exception as e:
+            logger.error("FLUX.2 Klein CPU offload fallback also failed: %s", e)
 
     if not pipes:
         logger.error("No models loaded. Volume path: %s", VOLUME_PATH)
@@ -184,35 +116,34 @@ def preload():
 def handler(job: dict) -> dict:
     inp: dict = job.get("input", {})
 
-    prompt          = str(inp.get("prompt", "")).strip()
-    model_key       = str(inp.get("model", "lustify")).lower()
-    width           = max(64, min(2048, int(inp.get("width", 1024))))
-    height          = max(64, min(2048, int(inp.get("height", 1024))))
-    steps           = max(1, min(150, int(inp.get("steps", 30))))
-    cfg_scale       = float(inp.get("cfg_scale", 7.0))
-    negative_prompt = str(inp.get("negative_prompt", "lowres, blurry, bad anatomy, worst quality"))
+    prompt = str(inp.get("prompt", "")).strip()
+    model_key = str(inp.get("model", "flux2klein")).lower()
+    width = max(64, min(2048, int(inp.get("width", 1024))))
+    height = max(64, min(2048, int(inp.get("height", 1024))))
 
     if not prompt:
         return {"error": "prompt is required"}
 
-    pipe = pipes.get(model_key) or pipes.get("lustify")
+    defaults = MODEL_DEFAULTS.get(model_key, MODEL_DEFAULTS["flux2klein"])
+    steps = int(inp.get("steps", defaults["steps"]))
+    cfg_scale = float(inp.get("cfg_scale", defaults["guidance_scale"]))
+
+    pipe = pipes.get(model_key) or pipes.get("flux2klein")
     if pipe is None:
-        return {"error": "No image model available. Check RunPod endpoint volume and model URLs."}
+        return {"error": "No image model available. Check logs for loading errors."}
 
-    logger.info("Generating [%s] %dx%d steps=%d prompt='%.80s'", model_key, width, height, steps, prompt)
+    logger.info(
+        "Generating [%s] %dx%d steps=%d cfg=%.1f prompt='%.80s'",
+        model_key, width, height, steps, cfg_scale, prompt,
+    )
 
-    is_turbo = "turbo" in getattr(pipe, "config", {}).get("_name_or_path", "").lower() or model_key == "zimage"
     gen_kwargs = {
         "prompt": prompt,
         "width": width,
         "height": height,
         "num_inference_steps": steps,
+        "guidance_scale": cfg_scale,
     }
-    if not is_turbo:
-        gen_kwargs["negative_prompt"] = negative_prompt
-        gen_kwargs["guidance_scale"] = cfg_scale
-    else:
-        gen_kwargs["guidance_scale"] = 0.0
 
     with torch.inference_mode():
         result = pipe(**gen_kwargs)

@@ -393,6 +393,8 @@ export type TAdditionalProps = {
   ask: TAskFunction;
   message: t.TMessage;
   isCreatedByUser: boolean;
+  isKynsImageMessage?: boolean;
+  isKynsDeepMessage?: boolean;
   siblingIdx: number;
   enterEdit: (cancel: boolean) => void;
   setSiblingIdx: (value: number) => void;
@@ -408,7 +410,7 @@ export type TEditProps = Pick<TInitialProps, 'isSubmitting'> &
     siblingIdx: number | null;
   };
 export type TDisplayProps = TText &
-  Pick<TAdditionalProps, 'isCreatedByUser' | 'message'> & {
+  Pick<TAdditionalProps, 'isCreatedByUser' | 'message' | 'isKynsImageMessage' | 'isKynsDeepMessage'> & {
     showCursor?: boolean;
   };
 
@@ -503,7 +505,7 @@ export type TMessageAudio = {
   isLast?: boolean;
   index: number;
   messageId: string;
-  content: string;
+  content: t.TMessageContentParts[] | string;
   className?: string;
   /** Voice ID from the agent, overrides the global voice setting */
   agentVoice?: string | null;

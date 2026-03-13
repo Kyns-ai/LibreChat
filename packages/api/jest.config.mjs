@@ -24,6 +24,7 @@ export default {
   moduleNameMapper: {
     '^@src/(.*)$': '<rootDir>/src/$1',
     '~/(.*)': '<rootDir>/src/$1',
+    '^winston-daily-rotate-file$': '<rootDir>/src/__mocks__/winston-daily-rotate-file.ts',
   },
   // coverageThreshold: {
   //   global: {
@@ -33,6 +34,7 @@ export default {
   //     lines: 57,
   //   },
   // },
+  maxWorkers: '50%',
   restoreMocks: true,
   testTimeout: 15000,
 };

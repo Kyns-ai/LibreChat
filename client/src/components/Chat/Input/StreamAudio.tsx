@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 import type { TMessage } from 'librechat-data-provider';
 import { useCustomAudioRef, MediaSourceAppender, usePauseGlobalAudio } from '~/hooks/Audio';
+import { useAgentsMapContext } from '~/Providers';
 import { getLatestText, logger } from '~/utils';
 import { useAuthContext } from '~/hooks';
 import { globalAudioId } from '~/common';
@@ -25,7 +26,8 @@ export default function StreamAudio({ index = 0 }) {
   const cacheTTS = useRecoilValue(store.cacheTTS);
   const playbackRate = useRecoilValue(store.playbackRate);
 
-  const voice = useRecoilValue(store.voice);
+  const globalVoice = useRecoilValue(store.voice);
+  const agentsMap = useAgentsMapContext();
   const activeRunId = useRecoilValue(store.activeRunFamily(index));
   const automaticPlayback = useRecoilValue(store.automaticPlayback);
   const isSubmitting = useRecoilValue(store.isSubmittingFamily(index));
@@ -49,6 +51,9 @@ export default function StreamAudio({ index = 0 }) {
 
   useEffect(() => {
     const latestText = getLatestText(latestMessage);
+
+    const agentVoice = agentsMap?.[latestMessage?.model ?? '']?.voice;
+    const voice = agentVoice ?? globalVoice;
 
     const shouldFetch = !!(
       token != null &&
@@ -107,13 +112,12 @@ export default function StreamAudio({ index = 0 }) {
         }
 
         const reader = response.body.getReader();
-
-        const type = 'audio/mpeg';
+        const audioMimeType = response.headers.get('content-type') ?? 'audio/mpeg';
         const browserSupportsType =
-          typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(type);
+          typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(audioMimeType);
         let mediaSource: MediaSourceAppender | undefined;
         if (browserSupportsType) {
-          mediaSource = new MediaSourceAppender(type);
+          mediaSource = new MediaSourceAppender(audioMimeType);
           setGlobalAudioURL(mediaSource.mediaSourceUrl);
         }
 
@@ -146,7 +150,7 @@ export default function StreamAudio({ index = 0 }) {
           if (!cacheKey) {
             throw new Error('Cache key not found');
           }
-          const audioBlob = new Blob(chunks, { type });
+          const audioBlob = new Blob(chunks, { type: audioMimeType });
           const cachedResponse = new Response(audioBlob);
           await cache.put(cacheKey, cachedResponse);
           if (!browserSupportsType) {
@@ -189,7 +193,8 @@ export default function StreamAudio({ index = 0 }) {
     audioRunId,
     cacheTTS,
     audioRef,
-    voice,
+    globalVoice,
+    agentsMap,
     token,
   ]);
 

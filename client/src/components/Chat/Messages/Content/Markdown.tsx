@@ -18,16 +18,25 @@ import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
 import { ArtifactProvider, CodeBlockProvider } from '~/Providers';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { langSubset, preprocessLaTeX } from '~/utils';
+import { normalizeRoleplayContent, remarkRoleplay } from '~/utils/remarkRoleplay';
 import { unicodeCitation } from '~/components/Web';
 import { code, a, p, img } from './MarkdownComponents';
+import KynsImageGeneration from './KynsImageGeneration';
 import store from '~/store';
 
 type TContentProps = {
   content: string;
   isLatestMessage: boolean;
+  isRoleplay?: boolean;
+  isKynsImageMessage?: boolean;
 };
 
-const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
+const Markdown = memo(function Markdown({
+  content = '',
+  isLatestMessage,
+  isRoleplay = false,
+  isKynsImageMessage = false,
+}: TContentProps) {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isInitializing = content === '';
 
@@ -35,8 +44,9 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
     if (isInitializing) {
       return '';
     }
-    return LaTeXParsing ? preprocessLaTeX(content) : content;
-  }, [content, LaTeXParsing, isInitializing]);
+    const normalizedContent = isRoleplay ? normalizeRoleplayContent(content) : content;
+    return LaTeXParsing ? preprocessLaTeX(normalizedContent) : normalizedContent;
+  }, [content, LaTeXParsing, isInitializing, isRoleplay]);
 
   const rehypePlugins = useMemo(
     () => [
@@ -53,17 +63,33 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
     [],
   );
 
-  const remarkPlugins: Pluggable[] = [
-    supersub,
-    remarkGfm,
-    remarkDirective,
-    artifactPlugin,
-    [remarkMath, { singleDollarTextMath: false }],
-    unicodeCitation,
-    mcpUIResourcePlugin,
-  ];
+  const remarkPlugins: Pluggable[] = useMemo(() => {
+    const plugins: Pluggable[] = [
+      supersub,
+      remarkGfm,
+      remarkDirective,
+      artifactPlugin,
+      [remarkMath, { singleDollarTextMath: false }],
+      unicodeCitation,
+      mcpUIResourcePlugin,
+    ];
+    if (isRoleplay) {
+      plugins.push(remarkRoleplay);
+    }
+    return plugins;
+  }, [isRoleplay]);
 
   if (isInitializing) {
+    if (isKynsImageMessage) {
+      return (
+        <div className="not-prose mt-2 w-full max-w-lg">
+          <div className="aspect-square">
+            <KynsImageGeneration />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="absolute">
         <p className="relative">
@@ -106,5 +132,6 @@ const Markdown = memo(({ content = '', isLatestMessage }: TContentProps) => {
     </MarkdownErrorBoundary>
   );
 });
+Markdown.displayName = 'Markdown';
 
 export default Markdown;
