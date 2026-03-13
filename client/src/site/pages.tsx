@@ -197,14 +197,18 @@ function MediaPanel({
           src={src}
         />
       )}
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/28 via-transparent to-transparent" />
       <div className="absolute inset-x-0 bottom-0 p-6 md:p-8">
-        <div className="max-w-2xl rounded-[28px] border border-white/12 bg-black/48 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.32)] backdrop-blur-md md:p-6">
-          <span className="site-media-chip border-white/18 bg-white/12 text-white">{label}</span>
-          <h3 className="site-display mt-5 text-3xl text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.45)] md:text-4xl">
+        <div className="max-w-2xl">
+          <span className="site-media-chip border-white/12 bg-black/22 text-white shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
+            {label}
+          </span>
+          <h3 className="site-display mt-5 text-3xl text-white drop-shadow-[0_4px_18px_rgba(0,0,0,0.55)] md:text-4xl">
             {title}
           </h3>
-          <p className="mt-4 max-w-xl text-base leading-8 text-white/90">{description}</p>
+          <p className="mt-4 max-w-xl text-base leading-8 text-white/92 drop-shadow-[0_3px_14px_rgba(0,0,0,0.5)]">
+            {description}
+          </p>
         </div>
       </div>
     </div>
