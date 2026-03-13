@@ -13,24 +13,17 @@ async function run() {
   await client.connect();
   console.log('Conectado!');
 
-  const adminDb = client.db('admin');
-  const dbList = await adminDb.admin().listDatabases();
-  console.log('Todos os bancos de dados:');
-  dbList.databases.forEach((d) => console.log(` - ${d.name} (${d.sizeOnDisk} bytes)`));
+  const col = client.db('test').collection('agents');
 
-  for (const dbInfo of dbList.databases) {
-    if (['admin', 'local', 'config'].includes(dbInfo.name)) continue;
-    const db = client.db(dbInfo.name);
-    const cols = await db.listCollections().toArray();
-    console.log(`\n[${dbInfo.name}] coleções:`, cols.map((c) => c.name).join(', '));
-    if (cols.some((c) => /agent/i.test(c.name))) {
-      const col = db.collection('agents');
-      const docs = await col
-        .find({}, { projection: { _id: 1, name: 1 } })
-        .toArray();
-      console.log(`  agents: ${docs.length} docs`);
-      docs.forEach((d) => console.log(`    _id=${d._id}  name="${d.name}"`));
-    }
+  const found = await col.find({ name: /kyns.?image/i }, { projection: { _id: 1, name: 1 } }).toArray();
+  console.log(`Encontrados ${found.length} agente(s):`);
+  found.forEach((a) => console.log(`  _id=${a._id}  name="${a.name}"`));
+
+  if (found.length > 0) {
+    const result = await col.deleteMany({ _id: { $in: found.map((a) => a._id) } });
+    console.log(`Deletados: ${result.deletedCount}`);
+  } else {
+    console.log('Nenhum agente encontrado.');
   }
 
   await client.close();
