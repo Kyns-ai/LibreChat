@@ -137,35 +137,6 @@ function Reveal({ children, className }: PropsWithChildren<{ className?: string 
   return <div ref={ref} className={`site-reveal ${visible ? 'site-reveal--visible' : ''} ${className ?? ''}`}>{children}</div>;
 }
 
-function PlaceholderPanel({
-  label,
-  title,
-  description,
-  video,
-}: {
-  label: string;
-  title: string;
-  description: string;
-  video?: boolean;
-}) {
-  return (
-    <div className={`site-placeholder ${video ? 'site-placeholder--video' : 'site-placeholder--image'} flex h-full flex-col justify-between p-6 md:p-8`}>
-      <div className="flex items-start justify-between gap-4">
-        <span className="site-media-chip">{label}</span>
-        {video ? (
-          <div className="flex size-14 items-center justify-center rounded-full border border-black/10 bg-white/70 text-black shadow-sm">
-            <span className="ml-1 text-sm font-semibold">PLAY</span>
-          </div>
-        ) : null}
-      </div>
-      <div className="max-w-lg">
-        <h3 className="site-display text-3xl text-[#111111] md:text-4xl">{title}</h3>
-        <p className="mt-4 max-w-xl text-base leading-8 text-[#5f5f5f]">{description}</p>
-      </div>
-    </div>
-  );
-}
-
 function MediaPanel({
   label,
   title,
@@ -456,7 +427,7 @@ function LegalMarkdownPage({ pageKey }: { pageKey: LegalPageKey }) {
         <Reveal>
           <SectionIntro eyebrow={page.eyebrow} title={page.title} description={page.updatedLabel} />
         </Reveal>
-        <Reveal className="mt-10">
+        <div className="mt-10">
           <article className="site-card px-6 py-8 md:px-10 md:py-12">
             <div className="site-markdown">
               <ReactMarkdown
@@ -468,7 +439,7 @@ function LegalMarkdownPage({ pageKey }: { pageKey: LegalPageKey }) {
               </ReactMarkdown>
             </div>
           </article>
-        </Reveal>
+        </div>
       </div>
     </section>
   );
@@ -686,15 +657,6 @@ export function SiteAboutPage() {
               eyebrow={aboutContent.hero.eyebrow}
               description={aboutContent.hero.description}
               title={aboutContent.hero.title}
-            />
-          </Reveal>
-          <Reveal className="mt-12">
-            {/* PLACEHOLDER: inserir vídeo ou imagem fundacional do Diógenes aqui */}
-            <PlaceholderPanel
-              description="Área principal para vídeo manifesto do KYNS ou still cinematográfico substituível depois pelo material final da marca."
-              label="FOUNDING MEDIA"
-              title="Fundação, privacidade e soberania do usuário."
-              video={true}
             />
           </Reveal>
         </div>

@@ -1,4 +1,4 @@
-import { createBrowserRouter, Outlet } from 'react-router-dom';
+import { Navigate, createBrowserRouter, Outlet } from 'react-router-dom';
 import {
   Login,
   VerifyEmail,
@@ -43,56 +43,63 @@ const AuthLayout = () => (
 
 const baseEl = document.querySelector('base');
 const baseHref = baseEl?.getAttribute('href') || '/';
+const MARKETING_HOSTS = new Set(['kyns.ai', 'www.kyns.ai']);
+const currentHostname = window.location.hostname.toLowerCase();
+const shouldServeMarketingSite = MARKETING_HOSTS.has(currentHostname);
 
 export const router = createBrowserRouter(
   [
-    {
-      path: '/',
-      element: <SiteLayout />,
-      errorElement: <RouteErrorBoundary />,
-      children: [
-        {
-          index: true,
-          element: <SiteHomePage />,
-        },
-        {
-          path: 'about',
-          element: <SiteAboutPage />,
-        },
-        {
-          path: 'philosophy',
-          element: <SitePhilosophyPage />,
-        },
-        {
-          path: 'transparency',
-          element: <SiteTransparencyPage />,
-        },
-        {
-          path: 'faq',
-          element: <SiteFAQPage />,
-        },
-        {
-          path: 'terms',
-          element: <SiteTermsPage />,
-        },
-        {
-          path: 'privacy',
-          element: <SitePrivacyPage />,
-        },
-        {
-          path: 'content-policy',
-          element: <SiteContentPolicyPage />,
-        },
-        {
-          path: 'acceptable-use',
-          element: <SiteAcceptableUsePage />,
-        },
-        {
-          path: 'contact',
-          element: <SiteContactPage />,
-        },
-      ],
-    },
+    ...(shouldServeMarketingSite
+      ? [
+          {
+            path: '/',
+            element: <SiteLayout />,
+            errorElement: <RouteErrorBoundary />,
+            children: [
+              {
+                index: true,
+                element: <SiteHomePage />,
+              },
+              {
+                path: 'about',
+                element: <SiteAboutPage />,
+              },
+              {
+                path: 'philosophy',
+                element: <SitePhilosophyPage />,
+              },
+              {
+                path: 'transparency',
+                element: <SiteTransparencyPage />,
+              },
+              {
+                path: 'faq',
+                element: <SiteFAQPage />,
+              },
+              {
+                path: 'terms',
+                element: <SiteTermsPage />,
+              },
+              {
+                path: 'privacy',
+                element: <SitePrivacyPage />,
+              },
+              {
+                path: 'content-policy',
+                element: <SiteContentPolicyPage />,
+              },
+              {
+                path: 'acceptable-use',
+                element: <SiteAcceptableUsePage />,
+              },
+              {
+                path: 'contact',
+                element: <SiteContactPage />,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       path: 'share/:shareId',
       element: <ShareRoute />,
@@ -159,6 +166,10 @@ export const router = createBrowserRouter(
           path: '/',
           element: <Root />,
           children: [
+            {
+              index: true,
+              element: <Navigate to="/c/new" replace={true} />,
+            },
             {
               path: 'c/:conversationId?',
               element: <ChatRoute />,
