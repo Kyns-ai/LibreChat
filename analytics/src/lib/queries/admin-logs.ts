@@ -7,7 +7,7 @@ export interface ErrorLog {
   conversationId: string
   messageId: string
   userId: string
-  errorType: 'error' | 'thinking_leak' | 'looping' | 'timeout'
+  errorType: 'error' | 'thinking_leak' | 'looping' | 'timeout' | 'prompt_injection'
   model: string
   endpoint: string
   snippet: string
@@ -28,6 +28,23 @@ export interface ModerationItem {
 
 const THINKING_PATTERNS = ['<think>', '</think>', 'Thinking Process:', '<reasoning>', '</reasoning>']
 const LOOP_MIN_BLOCK = 80
+const INJECTION_PATTERNS = [
+  'ignore previous instructions',
+  'ignore all previous',
+  'disregard your instructions',
+  'forget your rules',
+  'you are now',
+  'act as DAN',
+  'jailbreak',
+  'bypass your',
+  'override your',
+  'pretend you are',
+  'system prompt',
+  'reveal your prompt',
+  'show me your instructions',
+  'ignore the above',
+  'do anything now',
+]
 
 function detectThinkingLeak(text: string): boolean {
   return THINKING_PATTERNS.some((p) => text.includes(p))
@@ -37,6 +54,11 @@ function detectLooping(text: string): boolean {
   if (text.length < LOOP_MIN_BLOCK * 2) return false
   const block = text.substring(0, LOOP_MIN_BLOCK)
   return text.indexOf(block, LOOP_MIN_BLOCK) !== -1
+}
+
+function detectPromptInjection(text: string): boolean {
+  const lower = text.toLowerCase()
+  return INJECTION_PATTERNS.some((p) => lower.includes(p))
 }
 
 export async function getErrorLogs(opts: {
@@ -51,9 +73,14 @@ export async function getErrorLogs(opts: {
   const page = opts.page ?? 1
   const skip = (page - 1) * limit
 
-  const errorTypes: string[] = opts.type ? [opts.type] : ['error', 'thinking_leak', 'looping', 'timeout']
+  const errorTypes: string[] = opts.type ? [opts.type] : ['error', 'thinking_leak', 'looping', 'timeout', 'prompt_injection']
 
-  const match: Record<string, unknown> = { isCreatedByUser: false }
+  const includesInjection = errorTypes.includes('prompt_injection')
+  const match: Record<string, unknown> = includesInjection && errorTypes.length === 1
+    ? { isCreatedByUser: true }
+    : includesInjection
+      ? {}
+      : { isCreatedByUser: false }
   if (opts.userId) match['user'] = opts.userId
   if (opts.conversationId) match['conversationId'] = opts.conversationId
 
@@ -74,12 +101,14 @@ export async function getErrorLogs(opts: {
     const isThink = detectThinkingLeak(text)
     const isLoop = detectLooping(text)
     const isTimeout = text.includes('timeout') || text.includes('timed out')
+    const isInjection = doc.isCreatedByUser === true && detectPromptInjection(text)
 
     const types: ErrorLog['errorType'][] = []
     if (isError && errorTypes.includes('error')) types.push('error')
     if (isThink && errorTypes.includes('thinking_leak')) types.push('thinking_leak')
     if (isLoop && errorTypes.includes('looping')) types.push('looping')
     if (isTimeout && errorTypes.includes('timeout')) types.push('timeout')
+    if (isInjection && errorTypes.includes('prompt_injection')) types.push('prompt_injection' as ErrorLog['errorType'])
 
     for (const t of types) {
       logs.push({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
 import { getAllConfig, updateConfig } from '@/lib/queries/admin-config'
+import { logAuditEntry } from '@/lib/queries/audit'
 
 export async function GET(req: NextRequest)  {
   try {
@@ -27,6 +28,13 @@ export async function PUT(req: NextRequest)  {
       alertEmail: String(body.email ?? ''),
       alertThresholds: body.thresholds as Parameters<typeof updateConfig>[0]['alertThresholds'],
     })
+    logAuditEntry({
+      adminId: 'admin',
+      action: 'alert.update',
+      path: '/api/admin/alerts',
+      method: 'PUT',
+      details: body,
+    }).catch(() => {})
     return NextResponse.json({ ok: true })
 
   } catch (e) {

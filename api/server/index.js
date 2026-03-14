@@ -106,6 +106,10 @@ const startServer = async () => {
   app.use(cors());
   app.use(cookieParser());
 
+  /* Response time tracking for analytics */
+  const trackResponseTime = require('./middleware/trackResponseTime');
+  app.use(trackResponseTime);
+
   if (!isEnabled(DISABLE_COMPRESSION)) {
     app.use(compression());
   } else {

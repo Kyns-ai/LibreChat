@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { isEnabled } = require('@librechat/api');
 const { ViolationTypes } = require('librechat-data-provider');
 const getLogStores = require('./getLogStores');
@@ -35,6 +36,24 @@ const logViolation = async (req, res, type, errorMessage, score = 1) => {
   userLogs.push(errorMessage);
   delete errorMessage.user_id;
   await logs.set(key, userLogs);
+
+  // Persist to MongoDB for analytics dashboard
+  try {
+    const db = mongoose.connection?.db;
+    if (db) {
+      db.collection('kyns_violations').insertOne({
+        userId,
+        type,
+        score: +score,
+        violationCount,
+        ip: req.ip || req.headers?.['x-forwarded-for'] || null,
+        userAgent: req.headers?.['user-agent'] || null,
+        createdAt: new Date(),
+      }).catch(() => {});
+    }
+  } catch {
+    // Never let analytics tracking break violation handling
+  }
 };
 
 module.exports = logViolation;

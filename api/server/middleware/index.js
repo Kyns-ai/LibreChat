@@ -20,6 +20,7 @@ const validate = require('./validate');
 const limiters = require('./limiters');
 const uaParser = require('./uaParser');
 const checkBan = require('./checkBan');
+const trackResponseTime = require('./trackResponseTime');
 const noIndex = require('./noIndex');
 const roles = require('./roles');
 
@@ -48,4 +49,5 @@ module.exports = {
   buildEndpointOption,
   validateRegistration,
   validatePasswordReset,
+  trackResponseTime,
 };

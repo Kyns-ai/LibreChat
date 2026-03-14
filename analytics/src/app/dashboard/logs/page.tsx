@@ -15,6 +15,7 @@ const ERROR_TYPES = [
   { value: 'thinking_leak', label: 'Thinking Leaks' },
   { value: 'looping', label: 'Loops' },
   { value: 'timeout', label: 'Timeouts' },
+  { value: 'prompt_injection', label: 'Prompt Injection' },
 ]
 
 const TYPE_COLORS: Record<string, string> = {
@@ -22,6 +23,7 @@ const TYPE_COLORS: Record<string, string> = {
   thinking_leak: 'text-orange-400 bg-orange-500/10',
   looping: 'text-yellow-400 bg-yellow-500/10',
   timeout: 'text-blue-400 bg-blue-500/10',
+  prompt_injection: 'text-pink-400 bg-pink-500/10',
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -29,6 +31,7 @@ const TYPE_LABELS: Record<string, string> = {
   thinking_leak: 'Thinking Leak',
   looping: 'Loop',
   timeout: 'Timeout',
+  prompt_injection: 'Injection',
 }
 
 export default function LogsPage() {
@@ -55,8 +58,8 @@ export default function LogsPage() {
 
       <div className="p-6 space-y-6">
         {/* Summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {['error', 'thinking_leak', 'looping', 'timeout'].map((t) => (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {['error', 'thinking_leak', 'looping', 'timeout', 'prompt_injection'].map((t) => (
             <button
               key={t}
               onClick={() => { setType(type === t ? '' : t); setPage(1) }}

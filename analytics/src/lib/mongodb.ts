@@ -68,6 +68,7 @@ export async function ensureIndexes(): Promise<void> {
     database.collection('messages').createIndex({ createdAt: 1 }),
     database.collection('messages').createIndex({ user: 1, createdAt: 1 }),
     database.collection('messages').createIndex({ endpoint: 1, createdAt: 1 }),
+    database.collection('messages').createIndex({ error: 1, isCreatedByUser: 1, createdAt: -1 }),
     database.collection('conversations').createIndex({ user: 1, createdAt: 1 }),
     database.collection('conversations').createIndex({ endpoint: 1, createdAt: 1 }),
     database.collection('transactions').createIndex({ user: 1, createdAt: 1 }),
@@ -77,6 +78,17 @@ export async function ensureIndexes(): Promise<void> {
       { updatedAt: 1 },
       { expireAfterSeconds: 300 }
     ),
+    database.collection('kyns_violations').createIndex({ createdAt: -1 }),
+    database.collection('kyns_violations').createIndex({ type: 1, createdAt: -1 }),
+    database.collection('kyns_violations').createIndex({ userId: 1, createdAt: -1 }),
+    database.collection('kyns_response_times').createIndex({ createdAt: -1 }),
+    database.collection('kyns_response_times').createIndex({ path: 1, createdAt: -1 }),
+    database.collection('kyns_response_times').createIndex(
+      { createdAt: 1 },
+      { expireAfterSeconds: 30 * 86400 }
+    ),
+    database.collection('kyns_audit_log').createIndex({ createdAt: -1 }),
+    database.collection('kyns_audit_log').createIndex({ action: 1, createdAt: -1 }),
   ])
 }
 

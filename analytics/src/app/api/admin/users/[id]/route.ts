@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isAuthenticated } from '@/lib/auth'
 import { getUserById, getUserRecentConversations, updateUser, deleteUser } from '@/lib/queries/admin-users'
+import { logAuditEntry } from '@/lib/queries/audit'
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   if (!await isAuthenticated(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -34,6 +35,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     } else {
       return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
+    logAuditEntry({
+      adminId: 'admin',
+      action: action === 'ban' ? 'user.ban' : action === 'unban' ? 'user.unban' : 'user.update',
+      path: `/api/admin/users/${params.id}`,
+      method: 'PATCH',
+      targetId: params.id,
+      details: body,
+    }).catch(() => {})
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[API /admin/users/[id] PATCH]', e)
@@ -45,6 +54,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!await isAuthenticated(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
     await deleteUser(params.id)
+    logAuditEntry({
+      adminId: 'admin',
+      action: 'user.delete',
+      path: `/api/admin/users/${params.id}`,
+      method: 'DELETE',
+      targetId: params.id,
+    }).catch(() => {})
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error('[API /admin/users/[id] DELETE]', e)
