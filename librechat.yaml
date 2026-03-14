@@ -250,12 +250,4 @@ webSearch:
   searchProvider: "searxng"
   searxngInstanceUrl: "${SEARXNG_INSTANCE_URL}"
   safeSearch: 0
-  scraperProvider: "firecrawl"
-  firecrawlApiKey: "${FIRECRAWL_API_KEY}"
-  firecrawlApiUrl: "${FIRECRAWL_API_URL}"
-  firecrawlOptions:
-    formats: ["markdown"]
-    excludeTags: ["nav", "footer", "header", ".ads", ".cookie", ".banner"]
-    timeout: 15000
-    waitFor: 2000
   scraperTimeout: 45000
