@@ -50,7 +50,7 @@ speech:
       url: '${TTS_BASE_URL}'
       apiKey: '${TTS_API_KEY}'
       model: 'tts-1'
-      voices: ['luna', 'marina', 'isis', 'nala', 'oraculo', 'viktor', 'gojo', 'dante', 'o_mestre', 'dr_mente']
+      voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
   speechTab:
     textToSpeech:
       engineTTS: 'external'

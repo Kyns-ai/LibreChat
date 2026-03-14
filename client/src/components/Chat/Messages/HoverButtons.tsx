@@ -131,6 +131,35 @@ const HoverButtons = ({
   }
 
   const { isCreatedByUser, error } = message;
+  const isCharacterMessage = !isCreatedByUser && !!agentVoice;
+
+  if (isCharacterMessage) {
+    return (
+      <div className="group visible flex justify-center gap-0.5 self-end focus-within:outline-none lg:justify-start">
+        {TextToSpeech && (
+          <MessageAudio
+            index={index}
+            isLast={isLast}
+            messageId={message.messageId}
+            content={message.content ?? message.text ?? ''}
+            agentVoice={agentVoice}
+            renderButton={(props) => (
+              <HoverButton
+                onClick={props.onClick}
+                title={props.title}
+                icon={props.icon}
+                isActive={props.isActive}
+                isLast={isLast}
+              />
+            )}
+          />
+        )}
+        {handleFeedback != null && (
+          <Feedback handleFeedback={handleFeedback} feedback={message.feedback} isLast={isLast} />
+        )}
+      </div>
+    );
+  }
 
   if (error === true) {
     return (

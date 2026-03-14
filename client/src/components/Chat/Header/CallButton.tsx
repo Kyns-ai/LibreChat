@@ -1,15 +1,21 @@
-import { useState } from 'react';
-import { PhoneCall, X, Volume2 } from 'lucide-react';
-import { OGDialog, OGDialogContent, OGDialogTitle } from '@librechat/client';
+import React, { useState } from 'react';
+import { PhoneCall } from 'lucide-react';
 import { useLocalize } from '~/hooks';
+import VoiceCallScreen from './VoiceCallScreen';
 
 interface CallButtonProps {
   hasVoice?: boolean;
+  agentName?: string;
+  agentAvatar?: React.ReactNode;
 }
 
-const CallButton: React.FC<CallButtonProps> = ({ hasVoice = false }) => {
+const CallButton: React.FC<CallButtonProps> = ({ hasVoice = false, agentName = '', agentAvatar }) => {
   const localize = useLocalize();
-  const [isOpen, setIsOpen] = useState(false);
+  const [inCall, setInCall] = useState(false);
+
+  if (!hasVoice) {
+    return null;
+  }
 
   return (
     <>
@@ -17,7 +23,7 @@ const CallButton: React.FC<CallButtonProps> = ({ hasVoice = false }) => {
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          setIsOpen(true);
+          setInCall(true);
         }}
         className="ml-auto flex-shrink-0 rounded-full p-2 text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
         aria-label={localize('com_ui_voice_call')}
@@ -26,40 +32,13 @@ const CallButton: React.FC<CallButtonProps> = ({ hasVoice = false }) => {
         <PhoneCall className="h-4 w-4" />
       </button>
 
-      <OGDialog open={isOpen} onOpenChange={setIsOpen}>
-        <OGDialogContent className="max-w-sm">
-          <div className="flex flex-col items-center gap-4 p-6 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary">
-              {hasVoice ? (
-                <Volume2 className="h-8 w-8 text-text-secondary" />
-              ) : (
-                <PhoneCall className="h-8 w-8 text-text-secondary" />
-              )}
-            </div>
-            <div className="flex flex-col gap-1">
-              <OGDialogTitle className="text-xl font-semibold">
-                {localize('com_ui_voice_call_coming_soon')}
-              </OGDialogTitle>
-              <span className="inline-flex items-center justify-center rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-medium text-text-secondary">
-                {localize('com_ui_voice_call_status_coming_soon')}
-              </span>
-            </div>
-            <p className="text-sm text-text-secondary">
-              {hasVoice
-                ? localize('com_ui_voice_call_has_voice')
-                : localize('com_ui_voice_call_no_voice')}
-            </p>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="mt-2 rounded-lg bg-surface-secondary px-6 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover"
-            >
-              <X className="mr-1.5 inline h-3.5 w-3.5" />
-              {localize('com_ui_close')}
-            </button>
-          </div>
-        </OGDialogContent>
-      </OGDialog>
+      {inCall && (
+        <VoiceCallScreen
+          agentName={agentName}
+          agentAvatar={agentAvatar}
+          onEnd={() => setInCall(false)}
+        />
+      )}
     </>
   );
 };
