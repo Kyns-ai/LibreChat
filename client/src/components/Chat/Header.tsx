@@ -1,8 +1,9 @@
 import { memo, useMemo } from 'react';
+import { useRecoilValue } from 'recoil';
 import { useMediaQuery } from '@librechat/client';
 import { useOutletContext } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { getConfigDefaults, PermissionTypes, Permissions } from 'librechat-data-provider';
+import { getConfigDefaults, isAgentsEndpoint, PermissionTypes, Permissions } from 'librechat-data-provider';
 import type { ContextType } from '~/common';
 import { PresetsMenu, HeaderNewChat, OpenSidebar } from './Menus';
 import ModelSelector from './Menus/Endpoints/ModelSelector';
@@ -13,12 +14,17 @@ import { TemporaryChat } from './TemporaryChat';
 import AddMultiConvo from './AddMultiConvo';
 import { useHasAccess } from '~/hooks';
 import { cn } from '~/utils';
+import store from '~/store';
 
 const defaultInterface = getConfigDefaults().interface;
 
 function Header() {
   const { data: startupConfig } = useGetStartupConfig();
   const { navVisible, setNavVisible } = useOutletContext<ContextType>();
+  const conversation = useRecoilValue(store.conversationByIndex(0));
+
+  const isAgentChat =
+    conversation?.agent_id != null && isAgentsEndpoint(conversation.endpoint ?? '');
 
   const interfaceConfig = useMemo(
     () => startupConfig?.interface ?? defaultInterface,
@@ -69,15 +75,17 @@ function Header() {
                 !navVisible && !isSmallScreen ? 'pl-2' : '',
               )}
             >
-              <ModelSelector startupConfig={startupConfig} />
+              {!isAgentChat && <ModelSelector startupConfig={startupConfig} />}
               {interfaceConfig.presets === true && interfaceConfig.modelSelect && <PresetsMenu />}
-              {hasAccessToBookmarks === true && <BookmarkMenu />}
+              {!isAgentChat && hasAccessToBookmarks === true && <BookmarkMenu />}
               {hasAccessToMultiConvo === true && <AddMultiConvo />}
               {isSmallScreen && (
                 <>
-                  <ExportAndShareMenu
-                    isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}
-                  />
+                  {!isAgentChat && (
+                    <ExportAndShareMenu
+                      isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}
+                    />
+                  )}
                   {hasAccessToTemporaryChat === true && <TemporaryChat />}
                 </>
               )}
@@ -87,9 +95,11 @@ function Header() {
 
         {!isSmallScreen && (
           <div className="flex items-center gap-2">
-            <ExportAndShareMenu
-              isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}
-            />
+            {!isAgentChat && (
+              <ExportAndShareMenu
+                isSharedButtonEnabled={startupConfig?.sharedLinksEnabled ?? false}
+              />
+            )}
             {hasAccessToTemporaryChat === true && <TemporaryChat />}
           </div>
         )}
