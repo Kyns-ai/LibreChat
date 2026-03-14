@@ -85,6 +85,11 @@ const startServer = async () => {
 
   /* Middleware */
   app.use(noIndex);
+
+  /* Maintenance mode — checks kyns_config.maintenanceMode every 30s */
+  const checkMaintenance = require('./middleware/checkMaintenance');
+  app.use(checkMaintenance);
+
   app.use(express.json({ limit: '3mb' }));
   app.use(express.urlencoded({ extended: true, limit: '3mb' }));
   app.use(handleJsonParseError);

@@ -108,6 +108,14 @@ const checkBan = async (req, res, next = () => {}) => {
     const isBanned = !!(ipBan || userBan);
 
     if (!isBanned) {
+      // Also check the user's banned field directly (set by admin dashboard)
+      if (userId && req.user) {
+        const directBan = req.user.banned === true;
+        if (directBan) {
+          req.banned = true;
+          return await banResponse(req, res);
+        }
+      }
       return next();
     }
 

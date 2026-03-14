@@ -1,4 +1,4 @@
-import { connectDb, withRetry } from '../lib/mongodb'
+import { connectDb, withRetry, getCollection } from '../lib/mongodb'
 import { getDAU, getWAU, getMAU, getRetentionRates, getCohortAnalysis, getEngagementStats } from '../lib/queries/retention'
 import { getFeatureUsage, getFeatureRetentionCorrelation } from '../lib/queries/features'
 import { getCharacterStats, getCharacterRetention } from '../lib/queries/characters'
@@ -59,7 +59,76 @@ async function runAllAggregations() {
     safeRun('Error rate', () => getDailyErrorRate(14)),
   ])
 
+  await safeRun('Alerts', checkAndSendAlerts)
+
   console.log(`[CacheWorker] Done in ${Date.now() - start}ms`)
+}
+
+async function checkAndSendAlerts(): Promise<void> {
+  const col = await getCollection<{ key: string; value: unknown }>('kyns_config')
+  const webhookDoc = await col.findOne({ key: 'alertWebhook' })
+  const webhook = webhookDoc?.value as string | undefined
+  if (!webhook || webhook.trim() === '') return
+
+  const threshDoc = await col.findOne({ key: 'alertThresholds' })
+  const thresholds = (threshDoc?.value ?? {}) as {
+    errorRatePercent?: number
+    dailyCostUsd?: number
+    notifyOnThinkingLeak?: boolean
+  }
+
+  const alerts: string[] = []
+
+  const messages = await getCollection('messages')
+  const now = new Date()
+  const oneDayAgo = new Date(now.getTime() - 24 * 3600_000)
+  const [totalMsgs, errorMsgs] = await Promise.all([
+    messages.countDocuments({ createdAt: { $gte: oneDayAgo }, isCreatedByUser: false }),
+    messages.countDocuments({ createdAt: { $gte: oneDayAgo }, isCreatedByUser: false, error: true }),
+  ])
+
+  if (totalMsgs > 0 && thresholds.errorRatePercent) {
+    const errorRate = (errorMsgs / totalMsgs) * 100
+    if (errorRate > thresholds.errorRatePercent) {
+      alerts.push(`Error rate: ${errorRate.toFixed(1)}% (threshold: ${thresholds.errorRatePercent}%)`)
+    }
+  }
+
+  if (thresholds.notifyOnThinkingLeak) {
+    const leaks = await messages.countDocuments({
+      createdAt: { $gte: oneDayAgo },
+      isCreatedByUser: false,
+      text: { $regex: '<think>|</think>|Thinking Process:', $options: 'i' },
+    })
+    if (leaks > 0) {
+      alerts.push(`Thinking leaks detected: ${leaks} in last 24h`)
+    }
+  }
+
+  if (alerts.length === 0) return
+
+  const body = {
+    text: `KYNS Alert: ${alerts.join(' | ')}`,
+    embeds: [{
+      title: 'KYNS Analytics Alert',
+      description: alerts.map((a) => `- ${a}`).join('\n'),
+      color: 0xef4444,
+      timestamp: now.toISOString(),
+    }],
+  }
+
+  try {
+    const res = await fetch(webhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      console.error(`[Alerts] Webhook failed: ${res.status}`)
+    }
+  } catch (e) {
+    console.error('[Alerts] Webhook error:', (e as Error).message)
+  }
 }
 
 export function runCacheWorker() {

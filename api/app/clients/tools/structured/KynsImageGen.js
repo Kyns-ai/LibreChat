@@ -1,5 +1,6 @@
 const axios = require('axios');
 const sharp = require('sharp');
+const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 const { Tool } = require('@langchain/core/tools');
 const { logger } = require('@librechat/data-schemas');
@@ -56,20 +57,56 @@ const kynsImageSchema = {
 const displayMessage =
   "KYNS Image generated an image. All generated images are already plainly visible — don't repeat the description. Do not list download links; the user can click the image to download.";
 
+let _watermarkConfig = null;
+let _watermarkLastCheck = 0;
+
+async function getWatermarkConfig() {
+  const now = Date.now();
+  if (_watermarkConfig !== null && now - _watermarkLastCheck < 60_000) return _watermarkConfig;
+  _watermarkLastCheck = now;
+  try {
+    const db = mongoose.connection?.db;
+    if (db) {
+      const doc = await db.collection('kyns_config').findOne({ key: 'watermark' });
+      if (doc?.value) {
+        _watermarkConfig = doc.value;
+        return _watermarkConfig;
+      }
+    }
+  } catch {
+    // Fall through to defaults
+  }
+  _watermarkConfig = { enabled: true, text: 'kyns.ai', position: 'bottom-right', opacity: 0.5 };
+  return _watermarkConfig;
+}
+
 async function addWatermark(buffer) {
+  const config = await getWatermarkConfig();
+  if (config.enabled === false) return buffer;
+
   const meta = await sharp(buffer).metadata();
   const w = meta.width || 1024;
   const h = meta.height || 1024;
   const fontSize = Math.max(16, Math.floor(w / 45));
   const margin = 14;
-  const text = 'kyns.ai';
+  const text = config.text || 'kyns.ai';
+  const opacity = config.opacity ?? 0.65;
+  const shadowOpacity = Math.max(0, opacity - 0.2);
   const textW = Math.ceil(text.length * fontSize * 0.58);
-  const x = w - textW - margin;
-  const y = h - margin;
+  const textH = fontSize;
+
+  let x, y;
+  switch (config.position || 'bottom-right') {
+    case 'top-left': x = margin; y = textH + margin; break;
+    case 'top-right': x = w - textW - margin; y = textH + margin; break;
+    case 'bottom-left': x = margin; y = h - margin; break;
+    case 'center': x = (w - textW) / 2; y = (h + textH) / 2; break;
+    default: x = w - textW - margin; y = h - margin;
+  }
 
   const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
-    <text x="${x + 1}" y="${y + 1}" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold" fill="rgba(0,0,0,0.45)">${text}</text>
-    <text x="${x}" y="${y}" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold" fill="rgba(255,255,255,0.65)">${text}</text>
+    <text x="${x + 1}" y="${y + 1}" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold" fill="rgba(0,0,0,${shadowOpacity})">${text}</text>
+    <text x="${x}" y="${y}" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold" fill="rgba(255,255,255,${opacity})">${text}</text>
   </svg>`;
 
   return sharp(buffer)
