@@ -844,7 +844,10 @@ class AgentClient extends BaseClient {
         ...auth.authResult,
         logger,
       });
-      const rawResult = await searchTool.invoke({ query: query.trim() });
+      const rawResult = await searchTool.invoke({
+        query: query.trim(),
+        proMode: auth.authResult.scraperProvider != null,
+      });
       const { content, artifact } = normalizeToolResult(rawResult);
       const normalizedContent =
         typeof content === 'string'
