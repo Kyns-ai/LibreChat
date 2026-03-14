@@ -1211,7 +1211,26 @@ class AgentClient extends BaseClient {
       };
 
       const hideSequentialOutputs = config.configurable.hide_sequential_outputs;
-      await runAgents(initialMessages);
+
+      try {
+        await runAgents(initialMessages);
+      } catch (retryErr) {
+        const isTransient =
+          /Connection error|terminated|ECONNREFUSED|ECONNRESET|fetch failed|ETIMEDOUT|EngineCore/i.test(
+            retryErr?.message ?? '',
+          );
+        if (isTransient && this.contentParts.length === 0) {
+          const jitter = 2000 + Math.floor(Math.random() * 1000);
+          logger.warn(
+            `[AgentClient] Transient error before content, retrying once in ${jitter}ms: ${retryErr?.message}`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, jitter));
+          await runAgents(initialMessages);
+        } else {
+          throw retryErr;
+        }
+      }
+
       /** @deprecated Agent Chain */
       if (hideSequentialOutputs) {
         this.contentParts = this.contentParts.filter((part, index) => {

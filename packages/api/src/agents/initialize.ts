@@ -323,6 +323,42 @@ export async function initializeAgent(
   });
 
   const llmConfig = options.llmConfig as Record<string, unknown>;
+
+  /**
+   * Merge vLLM-specific addParams from the agents endpoint config into modelKwargs.
+   * Standard LLM params (temperature, max_tokens, etc.) are already set by the agent's
+   * own model_parameters; this injects provider-specific params like chat_template_kwargs,
+   * repetition_penalty, and top_k that aren't part of the standard OpenAI param set.
+   */
+  const agentsEConfig = req.config?.endpoints?.[EModelEndpoint.agents] as
+    | { addParams?: Record<string, unknown> }
+    | undefined;
+  if (agentsEConfig?.addParams) {
+    const standardParams = new Set([
+      'temperature',
+      'max_tokens',
+      'top_p',
+      'frequency_penalty',
+      'presence_penalty',
+      'timeout',
+      'model',
+      'stream',
+    ]);
+    const currentKwargs = ((llmConfig.modelKwargs as Record<string, unknown>) ?? {});
+    let hasNewKwargs = false;
+
+    for (const [key, value] of Object.entries(agentsEConfig.addParams)) {
+      if (!standardParams.has(key) && currentKwargs[key] === undefined) {
+        currentKwargs[key] = value;
+        hasNewKwargs = true;
+      }
+    }
+
+    if (hasNewKwargs) {
+      llmConfig.modelKwargs = currentKwargs;
+    }
+  }
+
   const tokensModel =
     agent.provider === EModelEndpoint.azureOpenAI ? agent.model : (llmConfig?.model as string);
   const maxOutputTokens = optionalChainWithEmptyCheck(
