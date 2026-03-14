@@ -111,6 +111,11 @@ const agentSchema = new Schema<IAgent>(
       type: Schema.Types.Mixed,
       default: undefined,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
     is_promoted: {
       type: Boolean,
       default: false,

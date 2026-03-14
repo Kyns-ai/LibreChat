@@ -677,7 +677,7 @@ const getListAgentsByAccess = async ({
   const normalizedLimit = isPaginated ? Math.min(Math.max(1, parseInt(limit) || 20), 100) : null;
 
   // Build base query combining ACL accessible agents with other filters
-  const baseQuery = { ...otherParams, _id: { $in: accessibleIds } };
+  const baseQuery = { ...otherParams, _id: { $in: accessibleIds }, isActive: { $ne: false } };
 
   // Add cursor condition
   if (after) {

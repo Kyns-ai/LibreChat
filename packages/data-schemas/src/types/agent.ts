@@ -41,6 +41,7 @@ export interface IAgent extends Omit<Document, 'model'> {
   /** Optional first message shown when user opens a new chat with this agent (Character.AI style) */
   greeting?: string;
   support_contact?: ISupportContact;
+  isActive?: boolean;
   is_promoted?: boolean;
   /** MCP server names extracted from tools for efficient querying */
   mcpServerNames?: string[];
