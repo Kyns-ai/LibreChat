@@ -51,10 +51,18 @@ speech:
       apiKey: '${TTS_API_KEY}'
       model: 'tts-1'
       voices: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+  stt:
+    openai:
+      url: '${STT_BASE_URL}'
+      apiKey: '${STT_API_KEY}'
+      model: 'whisper-1'
   speechTab:
+    conversationMode: true
+    speechToText:
+      engineSTT: 'browser'
     textToSpeech:
-      engineTTS: 'external'
-      automaticPlayback: false
+      engineTTS: 'browser'
+      automaticPlayback: true
       cacheTTS: true
 transactions:
   enabled: true
