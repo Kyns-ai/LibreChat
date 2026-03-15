@@ -1655,6 +1655,25 @@ describe('AgentClient - titleConvo', () => {
       expect(result).toBeUndefined();
       expect(mockProcessMemory).not.toHaveBeenCalled();
     });
+
+    it('should skip malformed langchain messages before building memory context', async () => {
+      const { HumanMessage, AIMessage } = require('@langchain/core/messages');
+      const messages = [
+        undefined,
+        new HumanMessage('Mensagem válida do usuário'),
+        null,
+        { role: 'user', content: 'objeto sem _getType' },
+        new AIMessage('Resposta válida do assistente'),
+      ];
+
+      await client.runMemory(messages);
+
+      expect(mockProcessMemory).toHaveBeenCalledTimes(1);
+      const processedMessage = mockProcessMemory.mock.calls[0][0][0];
+      expect(processedMessage.content).toContain('Mensagem válida do usuário');
+      expect(processedMessage.content).toContain('Resposta válida do assistente');
+      expect(processedMessage.content).not.toContain('objeto sem _getType');
+    });
   });
 
   describe('getMessagesForConversation - mapMethod and mapCondition', () => {
@@ -1873,6 +1892,28 @@ describe('AgentClient - titleConvo', () => {
       result.forEach((msg) => {
         expect(msg.mapped).toBe(true);
       });
+    });
+
+    it('should skip messages when mapMethod returns an invalid value', () => {
+      const messages = [
+        createMessage('msg-1', null, 'First message', { addedConvo: false }),
+        createMessage('msg-2', 'msg-1', 'Second message', { addedConvo: true }),
+        createMessage('msg-3', 'msg-2', 'Third message', { addedConvo: false }),
+      ];
+
+      const result = AgentClient.getMessagesForConversation({
+        messages,
+        parentMessageId: 'msg-3',
+        mapMethod: jest.fn((msg) => {
+          if (msg.messageId === 'msg-2') {
+            return undefined;
+          }
+          return msg;
+        }),
+        mapCondition: (msg) => msg.addedConvo === true,
+      });
+
+      expect(result.map((msg) => msg.messageId)).toEqual(['msg-1', 'msg-3']);
     });
   });
 
@@ -2372,7 +2413,9 @@ describe('AgentClient - prepareManualWebSearch', () => {
 
     expect(mockIsWebSearchSufficientlyAuthenticated).toHaveBeenCalledWith(fakeAuth);
     expect(mockCreateSearchTool).toHaveBeenCalled();
-    expect(mockInvoke).toHaveBeenCalledWith({ query: 'latest news about AI' });
+    expect(mockInvoke).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'latest news about AI' }),
+    );
     expect(result).not.toBe(payload);
     expect(result[0].content).toContain('Web search context:');
     expect(result[0].content).toContain('Search result content');
@@ -2450,5 +2493,121 @@ describe('AgentClient - prepareManualWebSearch', () => {
 
     expect(result[0].content).toContain('Web search context:');
     expect(result[0].content).toContain('Scraped content without reranker');
+  });
+});
+
+describe('AgentClient - KYNS image bypass', () => {
+  let client;
+  let originalFetch;
+  let mockReq;
+  let mockOptions;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    originalFetch = global.fetch;
+    global.fetch = jest.fn();
+
+    mockReq = {
+      user: { id: 'user-123' },
+      body: {
+        text: 'Gere uma imagem de um gato astronauta flutuando no espaço.',
+        endpoint: 'KYNS',
+        spec: 'kyns',
+      },
+      config: {},
+    };
+
+    mockOptions = {
+      req: mockReq,
+      res: {},
+      endpoint: 'KYNS',
+      spec: 'kyns',
+      agent: {
+        id: 'agent-123',
+        endpoint: 'KYNS',
+        provider: EModelEndpoint.openAI,
+        model_parameters: { model: 'llmfan46/Qwen3.5-27B-heretic-v2' },
+      },
+    };
+
+    client = new AgentClient(mockOptions);
+    client.chatCompletion = jest.fn();
+    client.contentParts = [];
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('bypasses the agent pipeline for explicit image requests on KYNS', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '![Imagem gerada](https://example.com/image.png)' } }],
+      }),
+    });
+
+    const result = await client.sendCompletion([]);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(client.chatCompletion).not.toHaveBeenCalled();
+
+    const [url, init] = global.fetch.mock.calls[0];
+    expect(url).toBe('http://127.0.0.1:3080/api/image-proxy/chat/completions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({
+      messages: [{ role: 'user', content: 'Gere uma imagem de um gato astronauta flutuando no espaço.' }],
+      model: 'zimage',
+    });
+
+    expect(result.completion).toEqual([
+      { type: 'text', text: '![Imagem gerada](https://example.com/image.png)' },
+    ]);
+  });
+
+  it('keeps normal chat completion for capability-only questions', async () => {
+    mockReq.body.text = 'Você gera imagem?';
+    client = new AgentClient(mockOptions);
+    client.chatCompletion = jest.fn(async () => {
+      client.contentParts.push({ type: 'text', text: 'Sim.' });
+    });
+    client.contentParts = [];
+
+    await client.sendCompletion([]);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(client.chatCompletion).toHaveBeenCalled();
+  });
+});
+
+describe('AgentClient - sanitizeLangChainMessages', () => {
+  it('creates a fallback human message when every message is malformed', () => {
+    const client = new AgentClient({
+      req: {
+        user: { id: 'user-123' },
+        body: { text: 'Olá' },
+        config: {},
+      },
+      res: {},
+      agent: {
+        id: 'agent-123',
+        endpoint: EModelEndpoint.openAI,
+        provider: EModelEndpoint.openAI,
+        model_parameters: { model: 'gpt-4' },
+      },
+      endpointTokenConfig: {},
+    });
+
+    client.getTokenCountForMessage = jest.fn().mockReturnValue(7);
+
+    const result = client.sanitizeLangChainMessages([undefined, null], {
+      context: 'agent run',
+      indexTokenCountMap: {},
+      fallbackText: 'Olá',
+    });
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0].content).toBe('Olá');
+    expect(result.indexTokenCountMap).toEqual({ 0: 7 });
   });
 });

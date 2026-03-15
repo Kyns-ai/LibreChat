@@ -3,11 +3,14 @@ import type { TConversation } from 'librechat-data-provider';
 import {
   dateKeys,
   storeEndpointSettings,
+  DEFAULT_CONVERSATION_TITLE,
   addConversationToInfinitePages,
   updateInfiniteConvoPage,
   findConversationInInfinite,
   removeConvoFromInfinitePages,
   groupConversationsByDate,
+  isDefaultConversationTitle,
+  normalizeConversationTitle,
   updateConvoFieldsInfinite,
   addConvoToAllQueries,
   updateConvoInAllQueries,
@@ -25,6 +28,28 @@ jest.mock('date-fns', () => {
 });
 
 describe('Conversation Utilities', () => {
+  describe('conversation title helpers', () => {
+    const localize = (key: string) => {
+      if (key === 'com_ui_new_chat') {
+        return 'Novo chat';
+      }
+      return key;
+    };
+
+    it('detects the default new chat title case-insensitively', () => {
+      expect(isDefaultConversationTitle(DEFAULT_CONVERSATION_TITLE)).toBe(true);
+      expect(isDefaultConversationTitle('new chat')).toBe(true);
+      expect(isDefaultConversationTitle('Novo chat')).toBe(false);
+      expect(isDefaultConversationTitle('Assunto real')).toBe(false);
+    });
+
+    it('localizes the default new chat title for display', () => {
+      expect(normalizeConversationTitle(DEFAULT_CONVERSATION_TITLE, localize)).toBe('Novo chat');
+      expect(normalizeConversationTitle('Assunto real', localize)).toBe('Assunto real');
+      expect(normalizeConversationTitle(undefined, localize)).toBe('');
+    });
+  });
+
   describe('groupConversationsByDate', () => {
     it('groups conversations by date correctly', () => {
       const conversations = [

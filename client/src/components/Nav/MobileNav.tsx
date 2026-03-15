@@ -4,7 +4,7 @@ import { QueryKeys } from 'librechat-data-provider';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Dispatch, SetStateAction } from 'react';
 import { useLocalize, useNewConvo } from '~/hooks';
-import { clearMessagesCache } from '~/utils';
+import { clearMessagesCache, normalizeConversationTitle } from '~/utils';
 import store from '~/store';
 
 export default function MobileNav({
@@ -19,6 +19,7 @@ export default function MobileNav({
   const { newConversation } = useNewConvo();
   const conversation = useRecoilValue(store.conversationByIndex(0));
   const { title = 'New Chat' } = conversation || {};
+  const displayTitle = normalizeConversationTitle(title, localize) || localize('com_ui_new_chat');
 
   return (
     <div className="bg-token-main-surface-primary sticky top-0 z-10 flex min-h-[40px] items-center justify-center bg-presentation pl-1 dark:text-white md:hidden">
@@ -57,7 +58,7 @@ export default function MobileNav({
         </svg>
       </button>
       <h1 className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-center text-sm font-normal">
-        {title ?? localize('com_ui_new_chat')}
+        {displayTitle}
       </h1>
       <button
         type="button"

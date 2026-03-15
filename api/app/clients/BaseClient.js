@@ -1078,6 +1078,9 @@ class BaseClient {
         break;
       }
       const message = messages.find((msg) => {
+        if (msg == null || typeof msg !== 'object') {
+          return false;
+        }
         const messageId = msg.messageId ?? msg.id;
         return messageId === currentMessageId;
       });
@@ -1099,6 +1102,18 @@ class BaseClient {
 
       const shouldMap = mapMethod != null && (mapCondition != null ? mapCondition(message) : true);
       const processedMessage = shouldMap ? mapMethod(message) : message;
+      if (processedMessage == null) {
+        logger.warn('[BaseClient] Skipping nullish message in getMessagesForConversation', {
+          currentMessageId,
+          parentMessageId: message.parentMessageId,
+        });
+        if (summary && message.summary) {
+          break;
+        }
+        currentMessageId =
+          message.parentMessageId === Constants.NO_PARENT ? null : message.parentMessageId;
+        continue;
+      }
       orderedMessages.push(processedMessage);
 
       if (summary && message.summary) {

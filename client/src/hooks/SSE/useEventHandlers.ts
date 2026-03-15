@@ -32,6 +32,7 @@ import {
   updateConvoInAllQueries,
   removeConvoFromAllQueries,
   findConversationInInfinite,
+  isDefaultConversationTitle,
 } from '~/utils';
 import { queueTitleGeneration } from '~/data-provider/SSE/queries';
 import useAttachmentHandler from '~/hooks/SSE/useAttachmentHandler';
@@ -145,10 +146,7 @@ export const getConvoTitle = ({
   currentTitle?: string | null;
   conversationId?: string | null;
 }): string | null | undefined => {
-  if (
-    parentId !== Constants.NO_PARENT &&
-    (currentTitle?.toLowerCase().includes('new chat') ?? false)
-  ) {
+  if (parentId !== Constants.NO_PARENT && isDefaultConversationTitle(currentTitle)) {
     const currentConvo = queryClient.getQueryData<TConversation>([
       QueryKeys.conversation,
       conversationId,

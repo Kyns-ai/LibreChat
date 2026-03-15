@@ -14,6 +14,17 @@ import type { TConversation, GroupedConversations } from 'librechat-data-provide
 import type { InfiniteData } from '@tanstack/react-query';
 
 // Date group helpers
+export const DEFAULT_CONVERSATION_TITLE = 'New Chat';
+
+export const isDefaultConversationTitle = (title?: string | null) =>
+  typeof title === 'string' &&
+  title.trim().toLowerCase() === DEFAULT_CONVERSATION_TITLE.toLowerCase();
+
+export const normalizeConversationTitle = (
+  title: string | null | undefined,
+  localize: (key: string) => string,
+) => (isDefaultConversationTitle(title) ? localize('com_ui_new_chat') : title ?? '');
+
 export const dateKeys = {
   today: 'com_ui_date_today',
   yesterday: 'com_ui_date_yesterday',

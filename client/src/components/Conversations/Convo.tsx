@@ -12,7 +12,7 @@ import { useGetEndpointsQuery } from '~/data-provider';
 import { NotificationSeverity } from '~/common';
 import { ConvoOptions } from './ConvoOptions';
 import RenameForm from './RenameForm';
-import { cn, logger } from '~/utils';
+import { cn, logger, normalizeConversationTitle, isDefaultConversationTitle } from '~/utils';
 import ConvoLink from './ConvoLink';
 import store from '~/store';
 
@@ -44,11 +44,15 @@ export default function Conversation({
   const { conversationId, title = '' } = conversation;
 
   const displayTitle = useMemo(() => {
-    if (!isAgentsEndpoint(conversation.endpoint)) return title || '';
-    if (title && title !== 'New Chat') return title;
+    if (!isAgentsEndpoint(conversation.endpoint)) {
+      return normalizeConversationTitle(title, localize);
+    }
+    if (title && !isDefaultConversationTitle(title)) {
+      return title;
+    }
     const agent = conversation.agent_id ? agentsMap?.[conversation.agent_id] : null;
-    return agent?.name ?? title ?? '';
-  }, [conversation.endpoint, conversation.agent_id, title, agentsMap]);
+    return agent?.name ?? normalizeConversationTitle(title, localize);
+  }, [conversation.endpoint, conversation.agent_id, title, agentsMap, localize]);
 
 
   const [titleInput, setTitleInput] = useState(title || '');

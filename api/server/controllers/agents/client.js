@@ -72,9 +72,15 @@ function sanitizePayload(payload) {
     return [];
   }
   const result = [];
-  for (const msg of payload) {
-    if (msg == null || typeof msg !== 'object') {
+  for (const rawMsg of payload) {
+    if (rawMsg == null || typeof rawMsg !== 'object') {
       continue;
+    }
+    const msg = {
+      ...rawMsg,
+    };
+    if (Array.isArray(msg.content)) {
+      msg.content = msg.content.filter((part) => part != null && typeof part === 'object');
     }
     if (!msg.role) {
       const inferred =
@@ -90,6 +96,22 @@ function sanitizePayload(payload) {
     result.push(msg);
   }
   return result;
+}
+
+function describeLangChainMessage(message) {
+  if (message == null) {
+    return { value: message };
+  }
+  if (typeof message !== 'object') {
+    return { valueType: typeof message };
+  }
+  return {
+    constructor: message.constructor?.name,
+    hasGetType: typeof message._getType === 'function',
+    role: typeof message.role === 'string' ? message.role : undefined,
+    contentType: Array.isArray(message.content) ? 'array' : typeof message.content,
+    keys: Object.keys(message).slice(0, 6),
+  };
 }
 
 function normalizeToolContent(result) {
@@ -573,6 +595,56 @@ class AgentClient extends BaseClient {
     logger.debug(`[AgentClient] ${stage} took ${elapsedMs}ms`);
   }
 
+  sanitizeLangChainMessages(messages, { context, indexTokenCountMap, fallbackText } = {}) {
+    const sanitizedMessages = [];
+    const remappedIndexTokenCountMap = indexTokenCountMap ? {} : undefined;
+    const droppedMessages = [];
+    const sourceMessages = Array.isArray(messages) ? messages : [];
+
+    for (let i = 0; i < sourceMessages.length; i++) {
+      const message = sourceMessages[i];
+      if (message == null || typeof message !== 'object' || typeof message._getType !== 'function') {
+        droppedMessages.push({
+          index: i,
+          ...describeLangChainMessage(message),
+        });
+        continue;
+      }
+
+      const nextIndex = sanitizedMessages.length;
+      sanitizedMessages.push(message);
+
+      if (remappedIndexTokenCountMap && Object.hasOwn(indexTokenCountMap, i)) {
+        remappedIndexTokenCountMap[nextIndex] = indexTokenCountMap[i];
+      }
+    }
+
+    if (sanitizedMessages.length === 0 && typeof fallbackText === 'string' && fallbackText.trim()) {
+      const fallbackContent = fallbackText.trim();
+      sanitizedMessages.push(new HumanMessage(fallbackContent));
+      if (remappedIndexTokenCountMap) {
+        remappedIndexTokenCountMap[0] = this.getTokenCountForMessage({
+          role: 'user',
+          content: fallbackContent,
+        });
+      }
+    }
+
+    if (droppedMessages.length > 0) {
+      logger.warn(`[AgentClient] Dropped malformed LangChain messages before ${context ?? 'processing'}`, {
+        conversationId: this.conversationId,
+        responseMessageId: this.responseMessageId,
+        droppedCount: droppedMessages.length,
+        droppedMessages,
+      });
+    }
+
+    return {
+      messages: sanitizedMessages,
+      indexTokenCountMap: remappedIndexTokenCountMap,
+    };
+  }
+
   /**
    * @returns {Promise<string | undefined>}
    */
@@ -746,22 +818,28 @@ class AgentClient extends BaseClient {
       if (this.processMemory == null) {
         return;
       }
+      const { messages: sanitizedMessages } = this.sanitizeLangChainMessages(messages, {
+        context: 'memory processing',
+      });
+      if (sanitizedMessages.length === 0) {
+        return;
+      }
       const appConfig = this.options.req.config;
       const memoryConfig = appConfig.memory;
       const messageWindowSize = memoryConfig?.messageWindowSize ?? 5;
 
-      let messagesToProcess = [...messages];
-      if (messages.length > messageWindowSize) {
-        for (let i = messages.length - messageWindowSize; i >= 0; i--) {
-          const potentialWindow = messages.slice(i, i + messageWindowSize);
+      let messagesToProcess = [...sanitizedMessages];
+      if (sanitizedMessages.length > messageWindowSize) {
+        for (let i = sanitizedMessages.length - messageWindowSize; i >= 0; i--) {
+          const potentialWindow = sanitizedMessages.slice(i, i + messageWindowSize);
           if (potentialWindow[0]?.role === 'user') {
             messagesToProcess = [...potentialWindow];
             break;
           }
         }
 
-        if (messagesToProcess.length === messages.length) {
-          messagesToProcess = [...messages.slice(-messageWindowSize)];
+        if (messagesToProcess.length === sanitizedMessages.length) {
+          messagesToProcess = [...sanitizedMessages.slice(-messageWindowSize)];
         }
       }
 
@@ -907,6 +985,65 @@ class AgentClient extends BaseClient {
     );
   }
 
+  isKynsEndpoint() {
+    const endpoint = this.options.endpoint;
+    const agentEndpoint = this.options.agent?.endpoint;
+    const bodyEndpoint = this.options.req?.body?.endpoint;
+    const bodyEndpointOption = this.options.req?.body?.endpointOption?.endpoint;
+    return (
+      endpoint === 'KYNS' ||
+      agentEndpoint === 'KYNS' ||
+      bodyEndpoint === 'KYNS' ||
+      bodyEndpointOption === 'KYNS'
+    );
+  }
+
+  isExplicitKynsImageRequest() {
+    const userText = this.options.req?.body?.text ?? '';
+    if (!userText.trim()) {
+      return false;
+    }
+
+    const capabilityQuestion =
+      /^\s*(voc[eê]|voce|you)\s+(gera|gerar|cria|criar|faz|fazer|generate|create|make|draw|render|illustrate)\s+(imagens?|images?|imagem|image|arte|art|foto|picture)\??\s*$/i;
+    if (capabilityQuestion.test(userText)) {
+      return false;
+    }
+
+    const imageCommand =
+      /^\s*(gere|gerar|gera|crie|criar|cria|fa[çc]a|fazer|faz|desenhe|desenhar|ilustre|ilustrar|renderize|renderizar|produza|produzir|make|create|generate|draw|render|illustrate)\b/i;
+    const imageVerb =
+      /\b(gere|gerar|gera|crie|criar|cria|fa[çc]a|faz|desenhe|desenhar|ilustre|ilustrar|renderize|renderizar|produza|produzir|make|create|generate|draw|render|illustrate)\b/i;
+    const imageTarget =
+      /\b(imagem|foto|fotografia|ilustra(?:ç|c)[aã]o|arte|artwork|poster|capa|banner|logo|wallpaper|avatar|retrato|portrait|scene|cen[áa]rio|character|personagem|image|picture)\b/i;
+    const directImageDescriptor =
+      /^\s*(uma?\s+)?(imagem|image|foto|arte|ilustra(?:ç|c)[aã]o)\s+(de|of)\b/i;
+    const nonImageTarget =
+      /\b(prompt|texto|copy|legenda|resumo|lista|t[ií]tulo|titulo|c[oó]digo|codigo|roteiro|plano|email)\b/i;
+
+    return (
+      directImageDescriptor.test(userText) ||
+      (imageCommand.test(userText) && !nonImageTarget.test(userText)) ||
+      (imageVerb.test(userText) && imageTarget.test(userText))
+    );
+  }
+
+  shouldBypassToKynsImage() {
+    return this.isKynsImageEndpoint() || (this.isKynsEndpoint() && this.isExplicitKynsImageRequest());
+  }
+
+  getKynsImageRequestedModel() {
+    const userText = this.options.req?.body?.text ?? '';
+    if (
+      /\b(flux2klein|kyns image|alta qualidade|maximum quality|max quality|high quality|photoreal|fotorreal|fotorrealista)\b/i.test(
+        userText,
+      )
+    ) {
+      return 'flux2klein';
+    }
+    return 'zimage';
+  }
+
   async executeKynsImageRequest() {
     const body = this.options.req?.body ?? {};
     const userText = body.text ?? '';
@@ -916,7 +1053,11 @@ class AgentClient extends BaseClient {
 
     const port = process.env.PORT || 3080;
     const spec = this.options.spec ?? body.spec ?? '';
-    const model = spec.includes('turbo') ? 'zimage' : 'flux2klein';
+    const model = this.isKynsImageEndpoint()
+      ? spec.includes('turbo')
+        ? 'zimage'
+        : 'flux2klein'
+      : this.getKynsImageRequestedModel();
     const requestUserId = this.user ?? this.options.req?.user?.id;
     logger.info(`[KYNSImage] spec=${spec} → model=${model}`);
 
@@ -950,7 +1091,7 @@ class AgentClient extends BaseClient {
 
   /** @type {sendCompletion} */
   async sendCompletion(payload, opts = {}) {
-    if (this.isKynsImageEndpoint()) {
+    if (this.shouldBypassToKynsImage()) {
       logger.info('[KYNSImage] Bypass activated — skipping agent pipeline');
       try {
         const imageContent = await this.executeKynsImageRequest();
@@ -1117,6 +1258,14 @@ class AgentClient extends BaseClient {
         this.indexTokenCountMap,
         toolSet,
       );
+      ({ messages: initialMessages, indexTokenCountMap } = this.sanitizeLangChainMessages(
+        initialMessages,
+        {
+          context: 'agent run',
+          indexTokenCountMap,
+          fallbackText: this.options.req?.body?.text,
+        },
+      ));
 
       /**
        * @param {BaseMessage[]} messages
@@ -1229,6 +1378,15 @@ class AgentClient extends BaseClient {
         } else {
           throw retryErr;
         }
+      }
+
+      if (this.contentParts.length === 0) {
+        const jitter = 1500 + Math.floor(Math.random() * 500);
+        logger.warn(
+          `[AgentClient] Empty contentParts after successful processStream, retrying once in ${jitter}ms`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, jitter));
+        await runAgents(initialMessages);
       }
 
       /** @deprecated Agent Chain */
