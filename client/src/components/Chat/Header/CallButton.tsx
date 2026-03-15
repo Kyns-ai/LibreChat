@@ -6,10 +6,16 @@ import VoiceCallScreen from './VoiceCallScreen';
 interface CallButtonProps {
   hasVoice?: boolean;
   agentName?: string;
+  agentVoice?: string;
   agentAvatar?: React.ReactNode;
 }
 
-const CallButton: React.FC<CallButtonProps> = ({ hasVoice = false, agentName = '', agentAvatar }) => {
+const CallButton: React.FC<CallButtonProps> = ({
+  hasVoice = false,
+  agentName = '',
+  agentVoice = '',
+  agentAvatar,
+}) => {
   const localize = useLocalize();
   const [inCall, setInCall] = useState(false);
 
@@ -35,6 +41,7 @@ const CallButton: React.FC<CallButtonProps> = ({ hasVoice = false, agentName = '
       {inCall && (
         <VoiceCallScreen
           agentName={agentName}
+          agentVoice={agentVoice}
           agentAvatar={agentAvatar}
           onEnd={() => setInCall(false)}
         />

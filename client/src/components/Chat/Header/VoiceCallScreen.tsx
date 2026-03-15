@@ -3,10 +3,12 @@ import { createPortal } from 'react-dom';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { PhoneOff, Mic } from 'lucide-react';
 import useSoundEffects from '~/hooks/Audio/useSoundEffects';
+import { useAuthContext } from '~/hooks/AuthContext';
 import store from '~/store';
 
 interface VoiceCallScreenProps {
   agentName: string;
+  agentVoice: string;
   agentAvatar?: React.ReactNode;
   onEnd: () => void;
 }
@@ -25,7 +27,13 @@ function isRecorderActive() {
   return btn?.getAttribute('aria-pressed') === 'true';
 }
 
-const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({ agentName, agentAvatar, onEnd }) => {
+const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({
+  agentName,
+  agentVoice,
+  agentAvatar,
+  onEnd,
+}) => {
+  const { token } = useAuthContext();
   const { playRing, playClick, playHangup } = useSoundEffects();
 
   const [callState, setCallState] = useState<CallState>('connecting');
@@ -36,22 +44,70 @@ const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({ agentName, agentAvata
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const waveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const alive = useRef(true);
   const wasSubmitting = useRef(false);
+  const lastSpokenText = useRef('');
 
   const isSubmitting = useRecoilValue(store.isSubmitting);
+  const latestMessage = useRecoilValue(store.latestMessageFamily(0));
   const setAutoTranscribe = useSetRecoilState(store.autoTranscribeAudio);
   const setAutoSend = useSetRecoilState(store.autoSendText);
   const setAutoPlayback = useSetRecoilState(store.automaticPlayback);
+
+  // Speak text using TTS manual endpoint
+  const speakText = useCallback(
+    async (text: string) => {
+      if (!text.trim() || !token || !alive.current) return;
+      try {
+        setCallState('speaking');
+        const formData = new FormData();
+        formData.append('input', text);
+        formData.append('voice', agentVoice);
+
+        const res = await fetch('/api/files/speech/tts/manual', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+
+        if (!res.ok || !alive.current) {
+          if (alive.current) setCallState('idle');
+          return;
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          if (alive.current) setCallState('idle');
+        };
+
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          if (alive.current) setCallState('idle');
+        };
+
+        await audio.play();
+      } catch {
+        if (alive.current) setCallState('idle');
+      }
+    },
+    [token, agentVoice],
+  );
 
   // Mount
   useEffect(() => {
     setAutoTranscribe(true);
     setAutoSend(0);
-    setAutoPlayback(true);
+    setAutoPlayback(false); // We handle TTS ourselves
     timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
 
-    // Poll the real AudioRecorder state
     pollRef.current = setInterval(() => {
       if (!alive.current) return;
       const recording = isRecorderActive();
@@ -75,7 +131,10 @@ const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({ agentName, agentAvata
       if (waveRef.current) clearInterval(waveRef.current);
       if (pollRef.current) clearInterval(pollRef.current);
       clearTimeout(t);
-      // Stop recording if active when closing
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
       if (isRecorderActive()) clickRecorderButton();
       setAutoTranscribe(false);
       setAutoSend(-1);
@@ -83,25 +142,37 @@ const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({ agentName, agentAvata
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync callState ← AI responding
+  // When AI finishes responding, speak the response
   useEffect(() => {
     if (isSubmitting) {
       wasSubmitting.current = true;
-      setCallState('speaking');
+      setCallState('processing');
     } else if (wasSubmitting.current) {
       wasSubmitting.current = false;
-      if (alive.current) setCallState('idle');
+      if (!alive.current) return;
+
+      // Get the AI response text
+      const text = latestMessage?.text ?? '';
+      if (text && !latestMessage?.isCreatedByUser && text !== lastSpokenText.current) {
+        lastSpokenText.current = text;
+        setSubtitle(text.length > 60 ? `${text.substring(0, 60)}...` : text);
+        speakText(text);
+      } else {
+        setCallState('idle');
+      }
     }
-  }, [isSubmitting]);
+  }, [isSubmitting, latestMessage, speakText]);
 
   // Waveform
   useEffect(() => {
     if (waveRef.current) clearInterval(waveRef.current);
     if (callState === 'listening' || callState === 'speaking') {
       waveRef.current = setInterval(() => {
-        setHeights(Array.from({ length: BARS }, () =>
-          callState === 'listening' ? 3 + Math.random() * 16 : 4 + Math.random() * 26,
-        ));
+        setHeights(
+          Array.from({ length: BARS }, () =>
+            callState === 'listening' ? 3 + Math.random() * 16 : 4 + Math.random() * 26,
+          ),
+        );
       }, 120);
     } else if (callState === 'processing') {
       waveRef.current = setInterval(() => {
@@ -110,7 +181,9 @@ const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({ agentName, agentAvata
     } else {
       setHeights(Array(BARS).fill(3));
     }
-    return () => { if (waveRef.current) clearInterval(waveRef.current); };
+    return () => {
+      if (waveRef.current) clearInterval(waveRef.current);
+    };
   }, [callState]);
 
   const handleMic = useCallback(() => {
@@ -120,12 +193,18 @@ const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({ agentName, agentAvata
 
   const handleEnd = useCallback(() => {
     playHangup();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
     if (isRecorderActive()) clickRecorderButton();
     setTimeout(onEnd, 400);
   }, [playHangup, onEnd]);
 
   const fmt = (s: number) =>
-    `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+    `${Math.floor(s / 60)
+      .toString()
+      .padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
   const label: Record<CallState, string> = {
     connecting: 'Conectando...',
@@ -143,7 +222,8 @@ const VoiceCallScreen: React.FC<VoiceCallScreenProps> = ({ agentName, agentAvata
     speaking: 'bg-violet-400',
   };
 
-  const micBusy = callState === 'connecting' || callState === 'processing' || callState === 'speaking';
+  const micBusy =
+    callState === 'connecting' || callState === 'processing' || callState === 'speaking';
 
   return createPortal(
     <div

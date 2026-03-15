@@ -71,6 +71,7 @@ const AgentChatHeader: React.FC<AgentChatHeaderProps> = ({ conversation }) => {
           <CallButton
             hasVoice={!!agent?.voice}
             agentName={agent.name ?? ''}
+            agentVoice={agent.voice ?? ''}
             agentAvatar={renderAgentAvatar(agent, { size: 'lg', showBorder: false })}
           />
         </div>
