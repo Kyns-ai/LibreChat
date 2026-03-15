@@ -50,7 +50,16 @@ speech:
       apiKey: '${ELEVENLABS_API_KEY}'
       model: 'eleven_turbo_v2_5'
       voices:
-        - 'ALL'
+        - cgSgspJ2msm6clMCkdW9
+        - FGY2WhTYpPnrIDTdsKH5
+        - EXAVITQu4vr4xnSDxMaL
+        - hpp4J3VqNfWAUOO0d1Us
+        - pFZP5JQG7iQjIQuC4Bku
+        - pNInz6obpgDQGcFmaJgB
+        - iP95p4xoKVk53GoZ742B
+        - IKne3meq5aSn9XLyUdCD
+        - JBFqnCBsd6RMkjVDRZzb
+        - nPczCjzI2devNBz1zQrb
       voice_settings:
         similarity_boost: 0.75
         stability: 0.5

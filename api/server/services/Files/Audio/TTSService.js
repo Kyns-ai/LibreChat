@@ -313,7 +313,6 @@ class TTSService {
       const provider = this.getProvider(appConfig);
       const ttsSchema = appConfig?.speech?.tts?.[provider];
       const voice = await this.getVoice(ttsSchema, requestVoice);
-      logger.info(`[TTS] provider=${provider} requestVoice=${requestVoice} resolvedVoice=${voice} input=${(input ?? '').substring(0, 40)}`);
 
       if (input.length < 4096) {
         const response = await this.ttsRequest(provider, ttsSchema, { input, voice });
