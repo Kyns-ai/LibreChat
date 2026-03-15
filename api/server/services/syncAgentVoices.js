@@ -5,7 +5,7 @@ const VOICE_MAP = {
   'Marina': 'FGY2WhTYpPnrIDTdsKH5',
   'Ísis': 'EXAVITQu4vr4xnSDxMaL',
   'Nala': 'hpp4J3VqNfWAUOO0d1Us',
-  'Oráculo': 'pFZP5JQG7iQjIQuC4Bku',
+  'Oráculo': 'SAz9YHcvj6GT2YYXdXww',
   'Viktor': 'pNInz6obpgDQGcFmaJgB',
   'Dante': 'iP95p4xoKVk53GoZ742B',
   'Gojo Satoru': 'IKne3meq5aSn9XLyUdCD',
